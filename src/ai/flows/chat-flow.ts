@@ -20,7 +20,7 @@ export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 
 const ChartDataSchema = z.object({
     title: z.string().describe('A descriptive title for the chart.'),
-    data: z.array(z.record(z.any())).describe('The dataset for the chart, as an array of objects.'),
+    data: z.array(z.any()).describe('The dataset for the chart, as an array of objects.'),
     categories: z.array(z.string()).describe('An array of keys from the data objects to be plotted as categories (e.g., lines or bars).'),
     index: z.string().describe('The key in the data objects to be used as the chart\'s primary index or x-axis.'),
     type: z.enum(['bar', 'line', 'area']).default('bar').describe('The preferred type of chart to display.'),
