@@ -33,6 +33,7 @@ export function ChatPanel() {
   const { toast } = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,7 +49,9 @@ export function ChatPanel() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(messages));
+      if (!isTyping) {
+        localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(messages));
+      }
     } catch (error) {
       console.error("Failed to save chat history to local storage:", error);
     }
@@ -58,7 +61,7 @@ export function ChatPanel() {
         behavior: "smooth",
       });
     }
-  }, [messages]);
+  }, [messages, isTyping]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -76,18 +79,42 @@ export function ChatPanel() {
 
   const onSubmit: SubmitHandler<FormValues> = async (data) => {
     const userMessage: ChatMessage = { role: "user", content: data.message };
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
+    const historyForAPI = [...messages];
+    setMessages(prev => [...prev, userMessage]);
     form.reset();
     setIsLoading(true);
 
     try {
       const result = await chat({
-        history: messages,
+        history: historyForAPI,
         newMessage: data.message,
       });
-      const modelMessage: ChatMessage = { role: "model", content: result.response };
-      setMessages([...newMessages, modelMessage]);
+      setIsLoading(false);
+      setIsTyping(true);
+
+      const modelMessage: ChatMessage = { role: "model", content: "" };
+      setMessages(prev => [...prev, modelMessage]);
+      
+      const responseText = result.response;
+      const words = responseText.split(/(\s+)/);
+      
+      let currentContent = "";
+      for (const word of words) {
+          currentContent += word;
+          setMessages(prev => {
+              const newMessages = [...prev];
+              const lastMessageIndex = newMessages.length - 1;
+              if (newMessages[lastMessageIndex]?.role === 'model') {
+                newMessages[lastMessageIndex] = {
+                    ...newMessages[lastMessageIndex],
+                    content: currentContent
+                };
+              }
+              return newMessages;
+          });
+          await new Promise(r => setTimeout(r, 50));
+      }
+
     } catch (error) {
       console.error(error);
       toast({
@@ -95,12 +122,14 @@ export function ChatPanel() {
         title: "An error occurred",
         description: "Failed to get a response. Please try again.",
       });
-      // remove the user message if the API call fails
-      setMessages(messages);
+      setMessages(historyForAPI);
     } finally {
       setIsLoading(false);
+      setIsTyping(false);
     }
   };
+
+  const disabled = isLoading || isTyping;
 
   return (
     <Card className="flex flex-col h-[75vh]">
@@ -109,7 +138,7 @@ export function ChatPanel() {
           <CardTitle className="font-headline">Chat with Omondi AI</CardTitle>
           <CardDescription>Your creative partner is here to help.</CardDescription>
         </div>
-        <Button variant="outline" size="icon" onClick={handleClearChat} aria-label="Clear chat history">
+        <Button variant="outline" size="icon" onClick={handleClearChat} aria-label="Clear chat history" disabled={disabled}>
             <Trash2 className="h-4 w-4" />
         </Button>
       </CardHeader>
@@ -181,16 +210,19 @@ export function ChatPanel() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();
-                          form.handleSubmit(onSubmit)();
+                          if (!disabled) {
+                            form.handleSubmit(onSubmit)();
+                          }
                         }
                       }}
                       className="resize-none"
+                      disabled={disabled}
                     />
                   </FormControl>
                 </FormItem>
               )}
             />
-            <Button type="submit" disabled={isLoading} size="icon">
+            <Button type="submit" disabled={disabled} size="icon">
               <Send className="h-4 w-4" />
               <span className="sr-only">Send message</span>
             </Button>
