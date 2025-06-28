@@ -4,6 +4,20 @@ import { useState, useEffect, useRef } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import {
+  BarChart,
+  LineChart,
+  AreaChart,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Bar,
+  Line,
+  Area,
+  Tooltip as RechartsTooltip,
+} from "recharts";
 import {
   Card,
   CardContent,
@@ -17,21 +31,96 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { chat, type ChatMessage } from "@/ai/flows";
+import { chat, type ChatMessage, type ChartData } from "@/ai/flows";
+import {
+  ChartContainer,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Send, User, BrainCircuit, Trash2, Loader2 } from "lucide-react";
 
-const CHAT_HISTORY_KEY = "omondi_ai_chat_history_v1";
+const CHAT_HISTORY_KEY = "omondi_ai_chat_history_v2";
+
+interface DisplayMessage {
+  role: "user" | "model";
+  content: string;
+  chart?: ChartData;
+}
 
 const formSchema = z.object({
   message: z.string().min(1, "Message cannot be empty."),
 });
 type FormValues = z.infer<typeof formSchema>;
 
+const ChatMessageChart = ({ chartData }: { chartData: ChartData }) => {
+  const config = chartData.categories.reduce(
+    (acc, category, i) => {
+      acc[category] = {
+        label: category,
+        color: `hsl(var(--chart-${(i % 5) + 1}))`,
+      };
+      return acc;
+    },
+    {} as ChartConfig
+  );
+
+  const ChartComponent =
+    {
+      bar: BarChart,
+      line: LineChart,
+      area: AreaChart,
+    }[chartData.type] || BarChart;
+
+  const ChartElement =
+    {
+      bar: Bar,
+      line: Line,
+      area: Area,
+    }[chartData.type] || Bar;
+
+  return (
+    <div className="mt-4 p-4 border rounded-lg bg-background/50">
+      <h4 className="font-bold mb-4 text-sm text-center">{chartData.title}</h4>
+      <ChartContainer config={config} className="h-[250px] w-full">
+        <ChartComponent data={chartData.data} margin={{ left: 12, right: 12 }}>
+          <CartesianGrid vertical={false} />
+          <XAxis
+            dataKey={chartData.index}
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            tickFormatter={(value) => value.slice(0, 3)}
+          />
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            width={30}
+          />
+          <RechartsTooltip
+            cursor={false}
+            content={<ChartTooltipContent indicator="dot" />}
+          />
+          {chartData.categories.map((category) => (
+            <ChartElement
+              key={category}
+              dataKey={category}
+              fill={`var(--color-${category})`}
+              stroke={`var(--color-${category})`}
+              type="monotone"
+            />
+          ))}
+        </ChartComponent>
+      </ChartContainer>
+    </div>
+  );
+};
+
 export function ChatPanel() {
   const { toast } = useToast();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -78,9 +167,14 @@ export function ChatPanel() {
   };
 
   const onSubmit: SubmitHandler<FormValues> = async (data) => {
-    const userMessage: ChatMessage = { role: "user", content: data.message };
-    const historyForAPI = [...messages];
-    setMessages(prev => [...prev, userMessage]);
+    const originalMessages = [...messages];
+    const userMessage: DisplayMessage = { role: "user", content: data.message };
+    const historyForAPI: ChatMessage[] = messages.map(({ role, content }) => ({
+      role,
+      content,
+    }));
+
+    setMessages((prev) => [...prev, userMessage]);
     form.reset();
     setIsLoading(true);
 
@@ -89,32 +183,46 @@ export function ChatPanel() {
         history: historyForAPI,
         newMessage: data.message,
       });
+
       setIsLoading(false);
       setIsTyping(true);
 
-      const modelMessage: ChatMessage = { role: "model", content: "" };
-      setMessages(prev => [...prev, modelMessage]);
-      
+      const modelMessage: DisplayMessage = { role: "model", content: "" };
+      setMessages((prev) => [...prev, modelMessage]);
+
       const responseText = result.response;
       const words = responseText.split(/(\s+)/);
-      
+
       let currentContent = "";
       for (const word of words) {
-          currentContent += word;
-          setMessages(prev => {
-              const newMessages = [...prev];
-              const lastMessageIndex = newMessages.length - 1;
-              if (newMessages[lastMessageIndex]?.role === 'model') {
-                newMessages[lastMessageIndex] = {
-                    ...newMessages[lastMessageIndex],
-                    content: currentContent
-                };
-              }
-              return newMessages;
-          });
-          await new Promise(r => setTimeout(r, 50));
+        currentContent += word;
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          const lastMessageIndex = newMessages.length - 1;
+          if (newMessages[lastMessageIndex]?.role === "model") {
+            newMessages[lastMessageIndex] = {
+              ...newMessages[lastMessageIndex],
+              content: currentContent,
+            };
+          }
+          return newMessages;
+        });
+        await new Promise((r) => setTimeout(r, 50));
       }
 
+      if (result.chart) {
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          const lastMessageIndex = newMessages.length - 1;
+          if (newMessages[lastMessageIndex]?.role === "model") {
+            newMessages[lastMessageIndex] = {
+              ...newMessages[lastMessageIndex],
+              chart: result.chart,
+            };
+          }
+          return newMessages;
+        });
+      }
     } catch (error) {
       console.error(error);
       toast({
@@ -122,7 +230,7 @@ export function ChatPanel() {
         title: "An error occurred",
         description: "Failed to get a response. Please try again.",
       });
-      setMessages(historyForAPI);
+      setMessages(originalMessages);
     } finally {
       setIsLoading(false);
       setIsTyping(false);
@@ -136,10 +244,18 @@ export function ChatPanel() {
       <CardHeader className="flex-row items-center justify-between">
         <div>
           <CardTitle className="font-headline">Chat with Omondi AI</CardTitle>
-          <CardDescription>Your creative partner is here to help.</CardDescription>
+          <CardDescription>
+            Your creative partner is here to help.
+          </CardDescription>
         </div>
-        <Button variant="outline" size="icon" onClick={handleClearChat} aria-label="Clear chat history" disabled={disabled}>
-            <Trash2 className="h-4 w-4" />
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={handleClearChat}
+          aria-label="Clear chat history"
+          disabled={disabled}
+        >
+          <Trash2 className="h-4 w-4" />
         </Button>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden p-0">
@@ -162,13 +278,19 @@ export function ChatPanel() {
                 )}
                 <div
                   className={cn(
-                    "rounded-xl px-4 py-2 max-w-[80%] whitespace-pre-wrap",
+                    "rounded-xl px-4 py-2 max-w-[80%]",
                     message.role === "user"
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted"
                   )}
                 >
-                  <p className="text-sm">{message.content}</p>
+                  <ReactMarkdown
+                    className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-table:w-full prose-th:p-2 prose-th:border prose-td:p-2 prose-td:border"
+                    remarkPlugins={[remarkGfm]}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+                  {message.chart && <ChatMessageChart chartData={message.chart} />}
                 </div>
                 {message.role === "user" && (
                   <Avatar className="w-8 h-8 border">
@@ -181,14 +303,14 @@ export function ChatPanel() {
             ))}
             {isLoading && (
               <div className="flex items-start gap-3 justify-start">
-                  <Avatar className="w-8 h-8 border border-primary">
-                    <AvatarFallback className="bg-primary/20">
-                      <BrainCircuit className="w-5 h-5 text-primary" />
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="rounded-xl px-4 py-2 max-w-[80%] bg-muted flex items-center">
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                  </div>
+                <Avatar className="w-8 h-8 border border-primary">
+                  <AvatarFallback className="bg-primary/20">
+                    <BrainCircuit className="w-5 h-5 text-primary" />
+                  </AvatarFallback>
+                </Avatar>
+                <div className="rounded-xl px-4 py-2 max-w-[80%] bg-muted flex items-center">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
               </div>
             )}
           </div>
@@ -196,7 +318,10 @@ export function ChatPanel() {
       </CardContent>
       <CardFooter className="pt-6 flex flex-col items-start w-full">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex w-full items-start gap-2">
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex w-full items-start gap-2"
+          >
             <FormField
               control={form.control}
               name="message"
@@ -229,7 +354,7 @@ export function ChatPanel() {
           </form>
         </Form>
         <p className="text-xs text-muted-foreground mt-2 text-center w-full">
-            Omondi AI can make mistakes. Check important info.
+          Omondi AI can make mistakes. Check important info.
         </p>
       </CardFooter>
     </Card>
