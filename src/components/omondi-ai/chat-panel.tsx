@@ -191,11 +191,11 @@ export function ChatPanel() {
       setMessages((prev) => [...prev, modelMessage]);
 
       const responseText = result.response;
-      const words = responseText.split(/(\s+)/);
+      const chars = responseText.split('');
 
       let currentContent = "";
-      for (const word of words) {
-        currentContent += word;
+      for (const char of chars) {
+        currentContent += char;
         setMessages((prev) => {
           const newMessages = [...prev];
           const lastMessageIndex = newMessages.length - 1;
@@ -207,7 +207,7 @@ export function ChatPanel() {
           }
           return newMessages;
         });
-        await new Promise((r) => setTimeout(r, 50));
+        await new Promise((r) => setTimeout(r, 15));
       }
 
       if (result.chart) {
