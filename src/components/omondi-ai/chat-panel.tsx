@@ -207,7 +207,7 @@ export function ChatPanel() {
           }
           return newMessages;
         });
-        await new Promise((r) => setTimeout(r, 15));
+        await new Promise((r) => setTimeout(r, 2));
       }
 
       if (result.chart) {

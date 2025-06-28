@@ -49,11 +49,25 @@ export function DrawingCanvas() {
     }
   }, [color, lineWidth]);
 
-  const startDrawing = ({ nativeEvent }: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const { offsetX, offsetY } = nativeEvent instanceof MouseEvent ? nativeEvent : nativeEvent.touches[0];
+  const getEventCoords = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    if (e.nativeEvent instanceof MouseEvent) {
+      return { x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY };
+    }
+    return { 
+      x: e.nativeEvent.touches[0].clientX - rect.left, 
+      y: e.nativeEvent.touches[0].clientY - rect.top 
+    };
+  }
+
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const { x, y } = getEventCoords(e);
     if (contextRef.current) {
       contextRef.current.beginPath();
-      contextRef.current.moveTo(offsetX, offsetY);
+      contextRef.current.moveTo(x, y);
       setIsDrawing(true);
     }
   };
@@ -65,15 +79,16 @@ export function DrawingCanvas() {
     }
   };
 
-  const draw = ({ nativeEvent }: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !contextRef.current) {
       return;
     }
-    const { offsetX, offsetY } = nativeEvent instanceof MouseEvent ? nativeEvent : nativeEvent.touches[0];
+    e.preventDefault();
+    const { x, y } = getEventCoords(e);
     if (isErasing) {
-      contextRef.current.clearRect(offsetX - lineWidth / 2, offsetY - lineWidth / 2, lineWidth, lineWidth);
+      contextRef.current.clearRect(x - lineWidth / 2, y - lineWidth / 2, lineWidth, lineWidth);
     } else {
-      contextRef.current.lineTo(offsetX, offsetY);
+      contextRef.current.lineTo(x, y);
       contextRef.current.stroke();
     }
   };
