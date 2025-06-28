@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster"
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Omondi AI Vision',
+  title: 'Omondi AI',
   description: 'Next generation AI for your graphic design projects.',
 };
 

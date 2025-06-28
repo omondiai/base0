@@ -6,7 +6,7 @@ export function Header() {
       <div className="container flex h-14 max-w-screen-2xl items-center">
         <div className="mr-4 flex items-center">
           <BrainCircuit className="h-6 w-6 mr-2 text-primary" />
-          <h1 className="font-bold font-headline text-xl">Omondi AI Vision</h1>
+          <h1 className="font-bold font-headline text-xl">Omondi AI</h1>
         </div>
       </div>
     </header>
