@@ -1,0 +1,151 @@
+"use client";
+
+import { useState } from "react";
+import { useForm, SubmitHandler } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { generateImageFromDescription, improveImageGenerationPrompt } from "@/ai/flows";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import Image from "next/image";
+import { Download, Sparkles, Wand2 } from "lucide-react";
+
+const formSchema = z.object({
+  description: z.string().min(10, "Please enter a more detailed description."),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+export function ImageGenerationPanel() {
+  const { toast } = useToast();
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isImproving, setIsImproving] = useState(false);
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      description: "",
+    },
+  });
+
+  const onSubmit: SubmitHandler<FormValues> = async (data) => {
+    setIsLoading(true);
+    setImageUrl(null);
+    try {
+      const result = await generateImageFromDescription({ description: data.description });
+      if (result.imageUrl) {
+        setImageUrl(result.imageUrl);
+      } else {
+        throw new Error("Image generation failed to produce an image.");
+      }
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Generation Failed",
+        description: "Could not generate image. Please try a different prompt.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleImprovePrompt = async () => {
+    const currentPrompt = form.getValues("description");
+    if (!currentPrompt) {
+        toast({ title: "Prompt is empty", description: "Please enter a description to improve."})
+        return;
+    }
+    setIsImproving(true);
+    try {
+        const result = await improveImageGenerationPrompt({ originalPrompt: currentPrompt });
+        form.setValue("description", result.improvedPrompt, { shouldValidate: true });
+        toast({ title: "Prompt Improved!", description: "Your prompt has been enhanced for better results."})
+    } catch (error) {
+        console.error(error);
+        toast({ variant: "destructive", title: "Failed to Improve", description: "Could not improve the prompt."});
+    } finally {
+        setIsImproving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="font-headline">Image Generation</CardTitle>
+        <CardDescription>
+          Describe the image you want to create. Be as detailed as possible for the best results.
+        </CardDescription>
+      </CardHeader>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <CardContent className="space-y-4">
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Image Description</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="e.g., A futuristic cityscape at sunset, with flying cars and neon lights, in a photorealistic style."
+                      rows={5}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </CardContent>
+          <CardFooter className="flex flex-col sm:flex-row gap-2">
+            <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
+              <Sparkles className="mr-2 h-4 w-4" />
+              {isLoading ? "Generating..." : "Generate"}
+            </Button>
+            <Button type="button" variant="outline" onClick={handleImprovePrompt} disabled={isImproving} className="w-full sm:w-auto">
+                <Wand2 className="mr-2 h-4 w-4" />
+                {isImproving ? "Improving..." : "Improve Prompt"}
+            </Button>
+          </CardFooter>
+        </form>
+      </Form>
+      {(isLoading || imageUrl) && (
+        <CardContent>
+          <div className="aspect-square w-full rounded-lg overflow-hidden border">
+            {isLoading ? (
+              <div className="w-full h-full flex items-center justify-center bg-muted">
+                <Skeleton className="w-full h-full" />
+              </div>
+            ) : imageUrl && (
+              <div className="relative w-full h-full">
+                <Image src={imageUrl} alt="Generated by Omondi AI" fill style={{ objectFit: 'contain' }} data-ai-hint="abstract art"/>
+                <Button
+                  asChild
+                  size="icon"
+                  className="absolute top-2 right-2 z-10"
+                >
+                  <a href={imageUrl} download="omondi-ai-generated.png">
+                    <Download className="h-4 w-4" />
+                  </a>
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
