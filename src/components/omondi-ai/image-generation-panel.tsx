@@ -138,7 +138,7 @@ export function ImageGenerationPanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-headline">Image Generation</CardTitle>
+        <CardTitle className="font-headline">Image Generation & Enhancement</CardTitle>
         <CardDescription>
           Describe the image you want to create, or upload an image to enhance.
         </CardDescription>

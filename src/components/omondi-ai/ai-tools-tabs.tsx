@@ -4,17 +4,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImageGenerationPanel } from "./image-generation-panel";
 import { StyleTransferPanel } from "./style-transfer-panel";
 import { ChatPanel } from "./chat-panel";
-import { Sparkles, Combine, MessageCircle } from "lucide-react";
+import { VideoGenerationPanel } from "./video-generation-panel";
+import { Sparkles, Combine, MessageCircle, Video } from "lucide-react";
 
 export function AIToolsTabs() {
   return (
     <Tabs defaultValue="generate" className="w-full">
-      <TabsList className="grid w-full grid-cols-3 bg-muted/60">
+      <TabsList className="grid w-full grid-cols-4 bg-muted/60">
         <TabsTrigger value="generate" className="gap-2">
-          <Sparkles className="h-4 w-4" /> Generate
+          <Sparkles className="h-4 w-4" /> Image
+        </TabsTrigger>
+        <TabsTrigger value="video" className="gap-2">
+          <Video className="h-4 w-4" /> Video
         </TabsTrigger>
         <TabsTrigger value="style-transfer" className="gap-2">
-          <Combine className="h-4 w-4" /> Style Transfer
+          <Combine className="h-4 w-4" /> Style
         </TabsTrigger>
         <TabsTrigger value="chat" className="gap-2">
           <MessageCircle className="h-4 w-4" /> Chat
@@ -22,6 +26,9 @@ export function AIToolsTabs() {
       </TabsList>
       <TabsContent value="generate">
         <ImageGenerationPanel />
+      </TabsContent>
+      <TabsContent value="video">
+        <VideoGenerationPanel />
       </TabsContent>
       <TabsContent value="style-transfer">
         <StyleTransferPanel />
