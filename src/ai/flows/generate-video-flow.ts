@@ -12,7 +12,8 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import wav from 'wav';
-import ffmpegStatic from 'ffmpeg-static';
+import ffmpeg from '@ffmpeg-installer/ffmpeg';
+import ffprobe from 'ffprobe-static';
 import {spawn} from 'child_process';
 import {writeFile, unlink, readFile} from 'fs/promises';
 import {tmpdir} from 'os';
@@ -62,12 +63,46 @@ async function toWav(
     });
     const bufs: Buffer[] = [];
     writer.on('error', reject);
-    writer.on('data', (d) => bufs.push(d));
+    writer.on('data', d => bufs.push(d));
     writer.on('end', () => resolve(Buffer.concat(bufs)));
     writer.write(pcmData);
     writer.end();
   });
 }
+
+// Helper to get audio duration
+async function getAudioDuration(audioFilePath: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const ffprobeProcess = spawn(ffprobe.path, [
+        '-v', 'error',
+        '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1',
+        audioFilePath
+      ]);
+  
+      let duration = '';
+      ffprobeProcess.stdout.on('data', (data) => {
+        duration += data.toString();
+      });
+  
+      let stderr = '';
+      ffprobeProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+  
+      ffprobeProcess.on('close', (code) => {
+        if (code === 0) {
+          resolve(parseFloat(duration));
+        } else {
+          reject(new Error(`ffprobe exited with code ${code}: ${stderr}`));
+        }
+      });
+       ffprobeProcess.on('error', (err) => {
+        reject(err);
+      });
+    });
+  }
+
 
 const generateVideoFlow = ai.defineFlow(
   {
@@ -78,7 +113,12 @@ const generateVideoFlow = ai.defineFlow(
   async ({image, narration, prompt}) => {
     let audioWavBuffer: Buffer | null = null;
     let audioUrl: string | undefined = undefined;
+    let audioDuration = 5; // Default duration
 
+    const tempImageFile = join(tmpdir(), `input-${Date.now()}.${image.substring(image.indexOf('/') + 1, image.indexOf(';'))}`);
+    const tempAudioFile = join(tmpdir(), `input-${Date.now()}.wav`);
+    const tempVideoFile = join(tmpdir(), `output-${Date.now()}.mp4`);
+    
     // 1. Generate narration if text is provided
     if (narration) {
       const {media} = await ai.generate({
@@ -101,6 +141,8 @@ const generateVideoFlow = ai.defineFlow(
         );
         audioWavBuffer = await toWav(pcmBuffer);
         audioUrl = 'data:audio/wav;base64,' + audioWavBuffer.toString('base64');
+        await writeFile(tempAudioFile, audioWavBuffer);
+        audioDuration = await getAudioDuration(tempAudioFile);
       }
     }
 
@@ -109,26 +151,12 @@ const generateVideoFlow = ai.defineFlow(
       image.substring(image.indexOf(',') + 1),
       'base64'
     );
-    const imageMimeType = image.substring(
-      image.indexOf(':') + 1,
-      image.indexOf(';')
-    );
-    const imageExtension = imageMimeType.split('/')[1] || 'png';
-
-    const tempImageFile = join(tmpdir(), `input-${Date.now()}.${imageExtension}`);
-    const tempAudioFile = audioWavBuffer
-      ? join(tmpdir(), `input-${Date.now()}.wav`)
-      : null;
-    const tempVideoFile = join(tmpdir(), `output-${Date.now()}.mp4`);
-
+    
     await writeFile(tempImageFile, imageBuffer);
-    if (tempAudioFile && audioWavBuffer) {
-      await writeFile(tempAudioFile, audioWavBuffer);
-    }
 
-    const ffmpegPath = ffmpegStatic;
+    const ffmpegPath = ffmpeg.path;
     if (!ffmpegPath) {
-        throw new Error('Could not find ffmpeg binary.');
+      throw new Error('Could not find ffmpeg binary.');
     }
 
     // FFmpeg command arguments
@@ -137,41 +165,39 @@ const generateVideoFlow = ai.defineFlow(
       '-i', tempImageFile,
     ];
 
-    if (tempAudioFile) {
+    if (audioWavBuffer) {
       ffmpegArgs.push('-i', tempAudioFile, '-c:a', 'aac', '-b:a', '192k');
-      const audioDuration = 5; // You'll need a way to get audio duration, hardcoding for now.
-      ffmpegArgs.push('-t', `${audioDuration}`);
     } else {
-      // If no audio, generate a silent track for a default duration
-      ffmpegArgs.push('-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-t', '5');
+      // If no audio, generate a silent track for the default duration
+      ffmpegArgs.push('-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono');
     }
-
+    
     ffmpegArgs.push(
+      '-t', `${audioDuration}`, // set duration
       '-c:v', 'libx264', // Video codec
       '-pix_fmt', 'yuv420p', // Pixel format for compatibility
       '-vf', "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1", // Scale and pad to 720p
       '-y', // Overwrite output file if it exists
       tempVideoFile
     );
-    
 
     // Execute FFmpeg
     await new Promise<void>((resolve, reject) => {
       const process = spawn(ffmpegPath, ffmpegArgs);
-      
+
       let stderr = '';
-      process.stderr.on('data', (data) => {
+      process.stderr.on('data', data => {
         stderr += data.toString();
       });
 
-      process.on('close', (code) => {
+      process.on('close', code => {
         if (code === 0) {
           resolve();
         } else {
           reject(new Error(`ffmpeg process exited with code ${code}: ${stderr}`));
         }
       });
-      process.on('error', (err) => {
+      process.on('error', err => {
         reject(err);
       });
     });
@@ -180,7 +206,7 @@ const generateVideoFlow = ai.defineFlow(
 
     // Clean up temporary files
     await unlink(tempImageFile);
-    if (tempAudioFile) await unlink(tempAudioFile);
+    if(audioWavBuffer) await unlink(tempAudioFile);
     await unlink(tempVideoFile);
 
     return {
