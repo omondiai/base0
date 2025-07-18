@@ -12,8 +12,8 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import wav from 'wav';
-import ffmpeg from '@ffmpeg-installer/ffmpeg';
-import ffprobe from 'ffprobe-static';
+const ffmpeg = require('ffmpeg-static');
+const ffprobe = require('ffprobe-static');
 import {spawn} from 'child_process';
 import {writeFile, unlink, readFile} from 'fs/promises';
 import {tmpdir} from 'os';
@@ -154,7 +154,7 @@ const generateVideoFlow = ai.defineFlow(
     
     await writeFile(tempImageFile, imageBuffer);
 
-    const ffmpegPath = ffmpeg.path;
+    const ffmpegPath = ffmpeg;
     if (!ffmpegPath) {
       throw new Error('Could not find ffmpeg binary.');
     }
