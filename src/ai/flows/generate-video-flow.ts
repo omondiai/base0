@@ -12,7 +12,7 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import wav from 'wav';
-import ffmpeg from 'ffmpeg-static';
+import ffmpegStatic from 'ffmpeg-static';
 import {spawn} from 'child_process';
 import {writeFile, unlink, readFile} from 'fs/promises';
 import {tmpdir} from 'os';
@@ -147,9 +147,14 @@ const generateVideoFlow = ai.defineFlow(
       tempVideoFile
     );
 
+    const ffmpegPath = ffmpegStatic;
+    if (!ffmpegPath) {
+      throw new Error('Could not find ffmpeg binary');
+    }
+
     // Execute FFmpeg
     await new Promise<void>((resolve, reject) => {
-      const process = spawn(ffmpeg, ffmpegArgs);
+      const process = spawn(ffmpegPath, ffmpegArgs);
       process.on('close', (code) => {
         if (code === 0) {
           resolve();
