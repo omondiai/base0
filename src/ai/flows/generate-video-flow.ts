@@ -12,8 +12,8 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import wav from 'wav';
-const ffmpeg = require('ffmpeg-static');
-const ffprobe = require('ffprobe-static');
+const ffmpegStatic = require('ffmpeg-static');
+const ffprobeStatic = require('ffprobe-static');
 import {spawn} from 'child_process';
 import {writeFile, unlink, readFile} from 'fs/promises';
 import {tmpdir} from 'os';
@@ -73,7 +73,11 @@ async function toWav(
 // Helper to get audio duration
 async function getAudioDuration(audioFilePath: string): Promise<number> {
     return new Promise((resolve, reject) => {
-      const ffprobeProcess = spawn(ffprobe.path, [
+      const ffprobePath = ffprobeStatic.path;
+      if (!ffprobePath) {
+        return reject(new Error('Could not find ffprobe binary.'));
+      }
+      const ffprobeProcess = spawn(ffprobePath, [
         '-v', 'error',
         '-show_entries', 'format=duration',
         '-of', 'default=noprint_wrappers=1:nokey=1',
@@ -154,7 +158,7 @@ const generateVideoFlow = ai.defineFlow(
     
     await writeFile(tempImageFile, imageBuffer);
 
-    const ffmpegPath = ffmpeg;
+    const ffmpegPath = ffmpegStatic.path;
     if (!ffmpegPath) {
       throw new Error('Could not find ffmpeg binary.');
     }
