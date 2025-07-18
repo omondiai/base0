@@ -4,7 +4,7 @@ import { useState, ChangeEvent } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { generateNarration } from "@/ai/flows";
+import { generateVideo } from "@/ai/flows/generate-video-flow";
 import { useToast } from "@/hooks/use-toast";
 import {
   Card,
@@ -27,7 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import Image from "next/image";
-import { Video, Sparkles, Wand2, X, Download, FileAudio } from "lucide-react";
+import { Video, Sparkles, X, Download, FileAudio, Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const formSchema = z
@@ -36,9 +36,9 @@ const formSchema = z
     image: z.any().optional(),
     narration: z.string().optional(),
   })
-  .refine((data) => !!data.prompt || !!data.image, {
-    message: "Please provide a text prompt or upload an image.",
-    path: ["prompt"],
+  .refine((data) => !!data.image, {
+    message: "Please upload an image to generate a video.",
+    path: ["image"],
   });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -89,28 +89,38 @@ export function VideoGenerationPanel() {
   };
 
   const onSubmit: SubmitHandler<FormValues> = async (data) => {
+    if (!data.image) {
+        toast({
+            variant: "destructive",
+            title: "Image Required",
+            description: "You must upload an image to generate a video."
+        });
+        return;
+    }
+
     setIsLoading(true);
     setVideoUrl(null);
     setAudioUrl(null);
 
     try {
-      if (data.narration) {
-        const audioResult = await generateNarration({
-          narrationText: data.narration,
-        });
-        if (audioResult.audioUrl) {
-          setAudioUrl(audioResult.audioUrl);
-        }
+      const imageBase64 = await toBase64(data.image);
+      
+      const result = await generateVideo({
+        image: imageBase64,
+        narration: data.narration,
+        prompt: data.prompt
+      });
+      
+      if (result.videoUrl) {
+          setVideoUrl(result.videoUrl);
+      }
+      if (result.audioUrl) {
+          setAudioUrl(result.audioUrl);
       }
 
-      // Placeholder for actual video generation
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate network delay
-      const placeholderVideo = "https://placehold.co/1280x720.png";
-      setVideoUrl(placeholderVideo);
-
       toast({
-        title: "Request Submitted",
-        description: "Video generation is processing. Note: This is a placeholder.",
+        title: "Video Generated!",
+        description: "Your video has been created successfully.",
       });
 
     } catch (error) {
@@ -119,7 +129,7 @@ export function VideoGenerationPanel() {
         variant: "destructive",
         title: "Generation Failed",
         description:
-          "Could not generate video or audio. Please try again.",
+          "Could not generate video. Please try again.",
       });
     } finally {
       setIsLoading(false);
@@ -133,58 +143,25 @@ export function VideoGenerationPanel() {
       <CardHeader>
         <CardTitle className="font-headline">Advanced Video Creator</CardTitle>
         <CardDescription>
-          Generate a video from a text prompt or an image, with optional audio narration.
+          Generate a video from an image, with optional audio narration.
         </CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <CardContent className="space-y-4">
-            <Alert>
-              <Video className="h-4 w-4" />
-              <AlertTitle>Video Generation Notice</AlertTitle>
-              <AlertDescription>
-                This feature is currently under development. A placeholder image will be generated instead of a video. Full video generation is coming soon.
-              </AlertDescription>
-            </Alert>
-            <FormField
-              control={form.control}
-              name="prompt"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Video Prompt</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="A person giving a presentation..."
-                      rows={3}
-                      {...field}
-                      value={field.value ?? ""}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="relative flex items-center">
-              <div className="flex-grow border-t border-muted"></div>
-              <span className="flex-shrink mx-4 text-muted-foreground text-xs">
-                OR
-              </span>
-              <div className="flex-grow border-t border-muted"></div>
-            </div>
-
-            <FormField
+             <FormField
               control={form.control}
               name="image"
               render={() => (
                 <FormItem>
-                  <FormLabel>Upload an Image for Image-to-Video</FormLabel>
+                  <FormLabel>Upload an Image</FormLabel>
                   <FormControl>
                     <Input
                       id="video-image-upload"
                       type="file"
                       accept="image/*"
                       onChange={handleFileChange}
+                      required
                     />
                   </FormControl>
                   <FormMessage />
@@ -215,6 +192,25 @@ export function VideoGenerationPanel() {
             
             <FormField
               control={form.control}
+              name="prompt"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Video Prompt (Optional)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="A short description for the video's theme or action..."
+                      rows={2}
+                      {...field}
+                      value={field.value ?? ""}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
               name="narration"
               render={({ field }) => (
                 <FormItem>
@@ -234,7 +230,11 @@ export function VideoGenerationPanel() {
           </CardContent>
           <CardFooter className="flex flex-col sm:flex-row gap-2">
             <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
-              <Sparkles className="mr-2 h-4 w-4" />
+              {isLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-2 h-4 w-4" />
+              )}
               {isLoading ? "Generating..." : "Generate Video"}
             </Button>
           </CardFooter>
@@ -245,23 +245,24 @@ export function VideoGenerationPanel() {
           <div className="aspect-video w-full rounded-lg overflow-hidden border">
             {isLoading ? (
               <div className="w-full h-full flex items-center justify-center bg-muted">
-                <Skeleton className="w-full h-full" />
+                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                    <p>Generating video... this may take a moment.</p>
+                </div>
               </div>
             ) : videoUrl && (
-              <div className="relative w-full h-full">
-                <Image
+              <div className="relative w-full h-full bg-black">
+                <video
                   src={videoUrl}
-                  alt="Generated Video by Omondi AI"
-                  fill
-                  style={{ objectFit: "contain" }}
-                  data-ai-hint="video placeholder"
+                  controls
+                  className="w-full h-full object-contain"
                 />
                 <Button
                   asChild
                   size="icon"
                   className="absolute top-2 right-2 z-10"
                 >
-                  <a href={videoUrl} download="omondi-ai-video-placeholder.png">
+                  <a href={videoUrl} download="omondi-ai-video.mp4">
                     <Download className="h-4 w-4" />
                   </a>
                 </Button>
