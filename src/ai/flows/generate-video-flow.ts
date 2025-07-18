@@ -12,12 +12,14 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import wav from 'wav';
-const ffmpegStatic = require('ffmpeg-static');
-const ffprobeStatic = require('ffprobe-static');
 import {spawn} from 'child_process';
 import {writeFile, unlink, readFile} from 'fs/promises';
 import {tmpdir} from 'os';
 import {join} from 'path';
+
+const ffmpegStatic = require('ffmpeg-static');
+const ffprobeStatic = require('ffprobe-static');
+
 
 const GenerateVideoInputSchema = z.object({
   image: z
