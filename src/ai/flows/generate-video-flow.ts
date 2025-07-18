@@ -126,6 +126,11 @@ const generateVideoFlow = ai.defineFlow(
       await writeFile(tempAudioFile, audioWavBuffer);
     }
 
+    const ffmpegPath = ffmpegStatic;
+    if (!ffmpegPath) {
+        throw new Error('Could not find ffmpeg binary.');
+    }
+
     // FFmpeg command arguments
     const ffmpegArgs = [
       '-loop', '1', // Loop the input image
@@ -134,36 +139,37 @@ const generateVideoFlow = ai.defineFlow(
 
     if (tempAudioFile) {
       ffmpegArgs.push('-i', tempAudioFile, '-c:a', 'aac', '-b:a', '192k');
+      const audioDuration = 5; // You'll need a way to get audio duration, hardcoding for now.
+      ffmpegArgs.push('-t', `${audioDuration}`);
     } else {
       // If no audio, generate a silent track for a default duration
-      ffmpegArgs.push('-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono');
+      ffmpegArgs.push('-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-t', '5');
     }
 
     ffmpegArgs.push(
       '-c:v', 'libx264', // Video codec
-      '-t', tempAudioFile ? '5' : '5', // Duration (use audio length or default 5s)
       '-pix_fmt', 'yuv420p', // Pixel format for compatibility
       '-vf', "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1", // Scale and pad to 720p
+      '-y', // Overwrite output file if it exists
       tempVideoFile
     );
-
-    const ffmpegPath = ffmpegStatic;
-    if (!ffmpegPath) {
-      throw new Error('Could not find ffmpeg binary');
-    }
+    
 
     // Execute FFmpeg
     await new Promise<void>((resolve, reject) => {
       const process = spawn(ffmpegPath, ffmpegArgs);
+      
+      let stderr = '';
+      process.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
       process.on('close', (code) => {
         if (code === 0) {
           resolve();
         } else {
-          reject(new Error(`ffmpeg process exited with code ${code}`));
+          reject(new Error(`ffmpeg process exited with code ${code}: ${stderr}`));
         }
-      });
-      process.stderr.on('data', (data) => {
-        // console.error(`ffmpeg stderr: ${data}`); // For debugging
       });
       process.on('error', (err) => {
         reject(err);
