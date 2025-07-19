@@ -51,9 +51,17 @@ const enhanceImageFlow = ai.defineFlow(
     outputSchema: EnhanceImageOutputSchema,
   },
   async input => {
-    const textPrompt =
-      input.prompt ||
-      'Enhance this image to look like a professional graphic design. Improve lighting, color, composition, and overall appeal.';
+    const defaultSingleImagePrompt = 'Enhance this image to look like a professional graphic design. Improve lighting, color, composition, and overall appeal.';
+    const defaultMultiImagePrompt = 'Combine these images into a single, cohesive, and professional-looking graphic design. Arrange them in an aesthetically pleasing way.';
+    
+    let textPrompt;
+    if (input.prompt) {
+      textPrompt = input.prompt;
+    } else if (input.images.length > 1) {
+      textPrompt = defaultMultiImagePrompt;
+    } else {
+      textPrompt = defaultSingleImagePrompt;
+    }
 
     const promptParts: (MediaPart | string)[] = input.images.map(image => ({
       media: {url: image},

@@ -4,7 +4,7 @@ import { useState, ChangeEvent } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { generateImageFromDescription, enhanceImage } from "@/ai/flows";
+import { generateImageFromDescription, enhanceImage, improveImageGenerationPrompt } from "@/ai/flows";
 import { useToast } from "@/hooks/use-toast";
 import {
   Card,
@@ -93,17 +93,17 @@ export function ImageGenerationPanel() {
     const fileInput = document.getElementById('image-upload') as HTMLInputElement;
     if(fileInput) fileInput.value = "";
   }
+  
+  const cleanup = () => {
+    form.setValue("images", [], { shouldValidate: true });
+    setImagePreviews([]);
+    const fileInput = document.getElementById('image-upload') as HTMLInputElement;
+    if(fileInput) fileInput.value = "";
+  }
 
   const onSubmit: SubmitHandler<FormValues> = async (data) => {
     setIsLoading(true);
     setImageUrl(null);
-
-    const cleanup = () => {
-      form.setValue("images", [], { shouldValidate: true });
-      setImagePreviews([]);
-      const fileInput = document.getElementById('image-upload') as HTMLInputElement;
-      if(fileInput) fileInput.value = "";
-    }
 
     try {
       let result;
@@ -163,6 +163,14 @@ export function ImageGenerationPanel() {
   }
   
   const images = form.watch("images");
+  const hasImages = images && images.length > 0;
+  const hasMultipleImages = hasImages && images.length > 1;
+
+  const getPlaceholder = () => {
+    if (hasMultipleImages) return "e.g., 'Combine these into a photo grid' or 'Which one looks better?'";
+    if (hasImages) return "e.g., 'Make this photo look more vibrant' or 'Turn this into a painting'";
+    return "A futuristic cityscape at sunset...";
+  }
 
   return (
     <Card>
@@ -183,7 +191,7 @@ export function ImageGenerationPanel() {
                   <FormLabel>Description</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder={images && images.length > 0 ? "e.g., 'Combine these into a photo grid' or 'Which one looks better?'" : "A futuristic cityscape at sunset..."}
+                      placeholder={getPlaceholder()}
                       rows={3}
                       {...field}
                       value={field.value ?? ''}
@@ -237,9 +245,9 @@ export function ImageGenerationPanel() {
           <CardFooter className="flex flex-col sm:flex-row gap-2">
             <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
               <Sparkles className="mr-2 h-4 w-4" />
-              {isLoading ? "Generating..." : images && images.length > 0 ? "Process Images" : "Generate"}
+              {isLoading ? "Generating..." : hasImages ? "Process Images" : "Generate"}
             </Button>
-            <Button type="button" variant="outline" onClick={handleImprovePrompt} disabled={isImproving || (images && images.length > 0)} className="w-full sm:w-auto">
+            <Button type="button" variant="outline" onClick={handleImprovePrompt} disabled={isImproving || hasImages} className="w-full sm:w-auto">
                 <Wand2 className="mr-2 h-4 w-4" />
                 {isImproving ? "Improving..." : "Improve Prompt"}
             </Button>
