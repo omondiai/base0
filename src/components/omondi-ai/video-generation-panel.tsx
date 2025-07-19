@@ -25,10 +25,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import Image from "next/image";
 import { Video, Sparkles, X, Download, FileAudio, Loader2 } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const formSchema = z
   .object({
@@ -120,30 +118,28 @@ export function VideoGenerationPanel() {
 
       toast({
         title: "Video Generated!",
-        description: "Your video has been created successfully.",
+        description: "Your video has been created successfully. This may take a moment to appear.",
       });
 
     } catch (error) {
       console.error(error);
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
       toast({
         variant: "destructive",
         title: "Generation Failed",
-        description:
-          "Could not generate video. Please try again.",
+        description: `Could not generate video. ${errorMessage}`,
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const image = form.watch("image");
-
   return (
     <Card>
       <CardHeader>
         <CardTitle className="font-headline">Advanced Video Creator</CardTitle>
         <CardDescription>
-          Generate a video from an image, with optional audio narration.
+          Generate a video from an image, with an optional prompt and audio narration.
         </CardDescription>
       </CardHeader>
       <Form {...form}>
@@ -198,7 +194,7 @@ export function VideoGenerationPanel() {
                   <FormLabel>Video Prompt (Optional)</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="A short description for the video's theme or action..."
+                      placeholder="e.g., A cinematic shot of the person looking at the sunset."
                       rows={2}
                       {...field}
                       value={field.value ?? ""}
@@ -217,7 +213,7 @@ export function VideoGenerationPanel() {
                   <FormLabel>Audio Narration (Optional)</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Enter the text for the voiceover..."
+                      placeholder="Enter text here to generate a voiceover for your video."
                       rows={3}
                       {...field}
                       value={field.value ?? ""}
@@ -233,7 +229,7 @@ export function VideoGenerationPanel() {
               {isLoading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
+                <Video className="mr-2 h-4 w-4" />
               )}
               {isLoading ? "Generating..." : "Generate Video"}
             </Button>
@@ -245,9 +241,9 @@ export function VideoGenerationPanel() {
           <div className="aspect-video w-full rounded-lg overflow-hidden border">
             {isLoading ? (
               <div className="w-full h-full flex items-center justify-center bg-muted">
-                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                <div className="flex flex-col items-center gap-2 text-muted-foreground text-center p-4">
                     <Loader2 className="h-8 w-8 animate-spin" />
-                    <p>Generating video... this may take a moment.</p>
+                    <p>Generating video... this may take up to a minute.</p>
                 </div>
               </div>
             ) : videoUrl && (
@@ -256,6 +252,8 @@ export function VideoGenerationPanel() {
                   src={videoUrl}
                   controls
                   className="w-full h-full object-contain"
+                  autoPlay
+                  loop
                 />
                 <Button
                   asChild
@@ -271,7 +269,7 @@ export function VideoGenerationPanel() {
           </div>
           {audioUrl && !isLoading && (
              <div className="space-y-2">
-                <Label>Generated Audio</Label>
+                <Label>Generated Narration Audio</Label>
                 <audio controls src={audioUrl} className="w-full" />
                  <Button asChild variant="outline" size="sm">
                      <a href={audioUrl} download="omondi-ai-narration.wav">

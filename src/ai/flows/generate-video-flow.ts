@@ -12,14 +12,7 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import wav from 'wav';
-import {spawn} from 'child_process';
-import {writeFile, unlink, readFile} from 'fs/promises';
-import {tmpdir} from 'os';
-import {join} from 'path';
-
-const ffmpegStatic = require('ffmpeg-static');
-const ffprobeStatic = require('ffprobe-static');
-
+import {MediaPart} from 'genkit/media';
 
 const GenerateVideoInputSchema = z.object({
   image: z
@@ -51,64 +44,23 @@ export async function generateVideo(
 }
 
 // Helper to convert PCM audio data to a WAV file buffer
-async function toWav(
-  pcmData: Buffer,
-  channels = 1,
-  rate = 24000,
-  sampleWidth = 2
-): Promise<Buffer> {
+async function toWav(pcmData: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
     const writer = new wav.Writer({
-      channels,
-      sampleRate: rate,
-      bitDepth: sampleWidth * 8,
+      channels: 1,
+      sampleRate: 24000,
+      bitDepth: 16,
     });
     const bufs: Buffer[] = [];
     writer.on('error', reject);
     writer.on('data', d => bufs.push(d));
-    writer.on('end', () => resolve(Buffer.concat(bufs)));
+    writer.on('end', () =>
+      resolve('data:audio/wav;base64,' + Buffer.concat(bufs).toString('base64'))
+    );
     writer.write(pcmData);
     writer.end();
   });
 }
-
-// Helper to get audio duration
-async function getAudioDuration(audioFilePath: string): Promise<number> {
-    return new Promise((resolve, reject) => {
-      const ffprobePath = ffprobeStatic.path;
-      if (!ffprobePath) {
-        return reject(new Error('Could not find ffprobe binary.'));
-      }
-      const ffprobeProcess = spawn(ffprobePath, [
-        '-v', 'error',
-        '-show_entries', 'format=duration',
-        '-of', 'default=noprint_wrappers=1:nokey=1',
-        audioFilePath
-      ]);
-  
-      let duration = '';
-      ffprobeProcess.stdout.on('data', (data) => {
-        duration += data.toString();
-      });
-  
-      let stderr = '';
-      ffprobeProcess.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-  
-      ffprobeProcess.on('close', (code) => {
-        if (code === 0) {
-          resolve(parseFloat(duration));
-        } else {
-          reject(new Error(`ffprobe exited with code ${code}: ${stderr}`));
-        }
-      });
-       ffprobeProcess.on('error', (err) => {
-        reject(err);
-      });
-    });
-  }
-
 
 const generateVideoFlow = ai.defineFlow(
   {
@@ -117,17 +69,13 @@ const generateVideoFlow = ai.defineFlow(
     outputSchema: GenerateVideoOutputSchema,
   },
   async ({image, narration, prompt}) => {
-    let audioWavBuffer: Buffer | null = null;
     let audioUrl: string | undefined = undefined;
-    let audioDuration = 5; // Default duration
+    let finalPrompt = prompt || 'Make this image come alive.';
 
-    const tempImageFile = join(tmpdir(), `input-${Date.now()}.${image.substring(image.indexOf('/') + 1, image.indexOf(';'))}`);
-    const tempAudioFile = join(tmpdir(), `input-${Date.now()}.wav`);
-    const tempVideoFile = join(tmpdir(), `output-${Date.now()}.mp4`);
-    
     // 1. Generate narration if text is provided
     if (narration) {
-      const {media} = await ai.generate({
+      finalPrompt = `${finalPrompt}. The video should be narrated with the following text: "${narration}"`;
+      const {media: audioMedia} = await ai.generate({
         model: googleAI.model('gemini-2.5-flash-preview-tts'),
         config: {
           responseModalities: ['AUDIO'],
@@ -140,84 +88,84 @@ const generateVideoFlow = ai.defineFlow(
         prompt: narration,
       });
 
-      if (media) {
+      if (audioMedia) {
         const pcmBuffer = Buffer.from(
-          media.url.substring(media.url.indexOf(',') + 1),
+          audioMedia.url.substring(audioMedia.url.indexOf(',') + 1),
           'base64'
         );
-        audioWavBuffer = await toWav(pcmBuffer);
-        audioUrl = 'data:audio/wav;base64,' + audioWavBuffer.toString('base64');
-        await writeFile(tempAudioFile, audioWavBuffer);
-        audioDuration = await getAudioDuration(tempAudioFile);
+        audioUrl = await toWav(pcmBuffer);
       }
     }
 
-    // 2. Create video from image (and audio if available)
-    const imageBuffer = Buffer.from(
-      image.substring(image.indexOf(',') + 1),
-      'base64'
-    );
-    
-    await writeFile(tempImageFile, imageBuffer);
-
-    const ffmpegPath = ffmpegStatic.path;
-    if (!ffmpegPath) {
-      throw new Error('Could not find ffmpeg binary.');
-    }
-
-    // FFmpeg command arguments
-    const ffmpegArgs = [
-      '-loop', '1', // Loop the input image
-      '-i', tempImageFile,
+    // 2. Generate video using Veo
+    const videoPrompt: (string | MediaPart)[] = [
+      {text: finalPrompt},
+      {media: {url: image}},
     ];
 
-    if (audioWavBuffer) {
-      ffmpegArgs.push('-i', tempAudioFile, '-c:a', 'aac', '-b:a', '192k');
-    } else {
-      // If no audio, generate a silent track for the default duration
-      ffmpegArgs.push('-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono');
+    if (audioUrl) {
+      videoPrompt.push({media: {url: audioUrl}});
     }
-    
-    ffmpegArgs.push(
-      '-t', `${audioDuration}`, // set duration
-      '-c:v', 'libx264', // Video codec
-      '-pix_fmt', 'yuv420p', // Pixel format for compatibility
-      '-vf', "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1", // Scale and pad to 720p
-      '-y', // Overwrite output file if it exists
-      tempVideoFile
-    );
 
-    // Execute FFmpeg
-    await new Promise<void>((resolve, reject) => {
-      const process = spawn(ffmpegPath, ffmpegArgs);
-
-      let stderr = '';
-      process.stderr.on('data', data => {
-        stderr += data.toString();
-      });
-
-      process.on('close', code => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`ffmpeg process exited with code ${code}: ${stderr}`));
-        }
-      });
-      process.on('error', err => {
-        reject(err);
-      });
+    let {operation} = await ai.generate({
+      model: googleAI.model('veo-2.0-generate-001'),
+      prompt: videoPrompt,
+      config: {
+        durationSeconds: 5,
+        aspectRatio: '16:9',
+        personGeneration: 'allow_adult',
+      },
     });
 
-    const videoBuffer = await readFile(tempVideoFile);
+    if (!operation) {
+      throw new Error('Expected the model to return an operation.');
+    }
 
-    // Clean up temporary files
-    await unlink(tempImageFile);
-    if(audioWavBuffer) await unlink(tempAudioFile);
-    await unlink(tempVideoFile);
+    // Wait until the operation completes.
+    while (!operation.done) {
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      operation = await ai.checkOperation(operation);
+    }
+
+    if (operation.error) {
+      throw new Error(`Video generation failed: ${operation.error.message}`);
+    }
+
+    const videoPart = operation.output?.message?.content.find(p =>
+      p.media?.contentType?.startsWith('video/')
+    );
+
+    if (!videoPart || !videoPart.media) {
+      throw new Error('Failed to find the generated video in the response.');
+    }
+
+    // Veo returns a temporary URL. We need to fetch it and convert to a data URI.
+    const fetch = (await import('node-fetch')).default;
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error(
+        'GEMINI_API_KEY is not set. Please set it in your .env file.'
+      );
+    }
+    const videoDownloadResponse = await fetch(
+      `${videoPart.media.url}&key=${apiKey}`
+    );
+
+    if (!videoDownloadResponse.ok || !videoDownloadResponse.body) {
+      throw new Error(
+        `Failed to download video from Veo: ${videoDownloadResponse.statusText}`
+      );
+    }
+
+    const videoBuffer = await videoDownloadResponse.arrayBuffer();
+    const videoBase64 = Buffer.from(videoBuffer).toString('base64');
+    const videoUrl = `data:${
+      videoPart.media.contentType || 'video/mp4'
+    };base64,${videoBase64}`;
 
     return {
-      videoUrl: 'data:video/mp4;base64,' + videoBuffer.toString('base64'),
-      audioUrl: audioUrl,
+      videoUrl,
+      audioUrl,
     };
   }
 );
