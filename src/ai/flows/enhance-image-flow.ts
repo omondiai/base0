@@ -1,26 +1,33 @@
 'use server';
 
 /**
- * @fileOverview AI agent that enhances an existing image based on a text prompt.
+ * @fileOverview AI agent that enhances or combines existing images based on a text prompt.
  *
- * - enhanceImage - A function that enhances an image based on an optional text description.
+ * - enhanceImage - A function that enhances or combines images based on a text description.
  * - EnhanceImageInput - The input type for the enhanceImage function.
  * - EnhanceImageOutput - The return type for the enhanceImage function.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import {MediaPart} from 'genkit/media';
 
 const EnhanceImageInputSchema = z.object({
-  image: z
-    .string()
-    .describe(
-      "The image to enhance, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
-    ),
+  images: z
+    .array(
+      z
+        .string()
+        .describe(
+          "An image to process, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+        )
+    )
+    .min(1),
   prompt: z
     .string()
     .optional()
-    .describe('An optional text description of how to enhance the image.'),
+    .describe(
+      'An optional text description of how to enhance or combine the images.'
+    ),
 });
 
 export type EnhanceImageInput = z.infer<typeof EnhanceImageInputSchema>;
@@ -48,9 +55,14 @@ const enhanceImageFlow = ai.defineFlow(
       input.prompt ||
       'Enhance this image to look like a professional graphic design. Improve lighting, color, composition, and overall appeal.';
 
+    const promptParts: (MediaPart | string)[] = input.images.map(image => ({
+      media: {url: image},
+    }));
+    promptParts.push(textPrompt);
+
     const {media} = await ai.generate({
       model: 'googleai/gemini-2.0-flash-preview-image-generation',
-      prompt: [{media: {url: input.image}}, {text: textPrompt}],
+      prompt: promptParts,
       config: {
         responseModalities: ['TEXT', 'IMAGE'],
       },

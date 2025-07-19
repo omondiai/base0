@@ -4,7 +4,7 @@ import { useState, ChangeEvent } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { generateImageFromDescription, improveImageGenerationPrompt, enhanceImage } from "@/ai/flows";
+import { generateImageFromDescription, enhanceImage } from "@/ai/flows";
 import { useToast } from "@/hooks/use-toast";
 import {
   Card,
@@ -24,9 +24,9 @@ import { Download, Sparkles, Wand2, X } from "lucide-react";
 
 const formSchema = z.object({
   description: z.string().optional(),
-  image: z.any().optional(),
-}).refine(data => !!data.description || !!data.image, {
-  message: "Please provide a description or upload an image.",
+  images: z.array(z.any()).optional(),
+}).refine(data => !!data.description || (data.images && data.images.length > 0), {
+  message: "Please provide a description or upload at least one image.",
   path: ["description"],
 });
 
@@ -45,31 +45,51 @@ export function ImageGenerationPanel() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isImproving, setIsImproving] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       description: "",
-      image: null,
+      images: [],
     },
   });
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      form.setValue("image", file, { shouldValidate: true });
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      const currentFiles = form.getValues('images') || [];
+      const newFiles = Array.from(files);
+      const combinedFiles = [...currentFiles, ...newFiles];
+      
+      form.setValue("images", combinedFiles, { shouldValidate: true });
+
+      const newPreviews: string[] = [];
+      const filePromises = newFiles.map(file => {
+        return new Promise<void>(resolve => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            newPreviews.push(reader.result as string);
+            resolve();
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+
+      Promise.all(filePromises).then(() => {
+        setImagePreviews(prev => [...prev, ...newPreviews]);
+      });
     }
   };
 
-  const clearImage = () => {
-    form.setValue("image", null, { shouldValidate: true });
-    setImagePreview(null);
+  const clearImage = (indexToRemove: number) => {
+    const currentFiles = form.getValues('images') || [];
+    const updatedFiles = currentFiles.filter((_, index) => index !== indexToRemove);
+    form.setValue("images", updatedFiles, { shouldValidate: true });
+
+    const updatedPreviews = imagePreviews.filter((_, index) => index !== indexToRemove);
+    setImagePreviews(updatedPreviews);
+
     const fileInput = document.getElementById('image-upload') as HTMLInputElement;
     if(fileInput) fileInput.value = "";
   }
@@ -77,12 +97,20 @@ export function ImageGenerationPanel() {
   const onSubmit: SubmitHandler<FormValues> = async (data) => {
     setIsLoading(true);
     setImageUrl(null);
+
+    const cleanup = () => {
+      form.setValue("images", [], { shouldValidate: true });
+      setImagePreviews([]);
+      const fileInput = document.getElementById('image-upload') as HTMLInputElement;
+      if(fileInput) fileInput.value = "";
+    }
+
     try {
       let result;
-      if (data.image) {
-        const imageBase64 = await toBase64(data.image);
+      if (data.images && data.images.length > 0) {
+        const imageBase64s = await Promise.all(data.images.map(toBase64));
         result = await enhanceImage({
-          image: imageBase64,
+          images: imageBase64s,
           prompt: data.description,
         });
       } else if (data.description) {
@@ -91,7 +119,7 @@ export function ImageGenerationPanel() {
         toast({
           variant: "destructive",
           title: "Invalid Input",
-          description: "Please provide a description or an image.",
+          description: "Please provide a description or at least one image.",
         });
         setIsLoading(false);
         return;
@@ -99,6 +127,7 @@ export function ImageGenerationPanel() {
 
       if (result.imageUrl) {
         setImageUrl(result.imageUrl);
+        cleanup();
       } else {
         throw new Error("Image generation failed to produce an image.");
       }
@@ -133,14 +162,14 @@ export function ImageGenerationPanel() {
     }
   }
   
-  const image = form.watch("image");
+  const images = form.watch("images");
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="font-headline">Image Generation & Enhancement</CardTitle>
         <CardDescription>
-          Describe the image you want to create, or upload an image to enhance.
+          Describe the image you want, or upload images to combine and enhance.
         </CardDescription>
       </CardHeader>
       <Form {...form}>
@@ -154,7 +183,7 @@ export function ImageGenerationPanel() {
                   <FormLabel>Description</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder={image ? "Describe how you'd like to improve the image..." : "A futuristic cityscape at sunset..."}
+                      placeholder={images && images.length > 0 ? "e.g., 'Combine these into a photo grid' or 'Which one looks better?'" : "A futuristic cityscape at sunset..."}
                       rows={3}
                       {...field}
                       value={field.value ?? ''}
@@ -167,36 +196,40 @@ export function ImageGenerationPanel() {
             
             <div className="relative flex items-center">
                 <div className="flex-grow border-t border-muted"></div>
-                <span className="flex-shrink mx-4 text-muted-foreground text-xs">OR</span>
+                <span className="flex-shrink mx-4 text-muted-foreground text-xs">OR UPLOAD</span>
                 <div className="flex-grow border-t border-muted"></div>
             </div>
 
             <FormField
               control={form.control}
-              name="image"
+              name="images"
               render={() => (
                 <FormItem>
-                  <FormLabel>Upload an Image to Enhance</FormLabel>
+                  <FormLabel>Upload Images to Enhance/Combine</FormLabel>
                   <FormControl>
-                    <Input id="image-upload" type="file" accept="image/*" onChange={handleFileChange} />
+                    <Input id="image-upload" type="file" accept="image/*" onChange={handleFileChange} multiple />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            {imagePreview && (
-              <div className="w-full aspect-square relative rounded-md overflow-hidden border">
-                  <Image src={imagePreview} alt="Image preview" fill style={{objectFit: 'cover'}} data-ai-hint="uploaded image" />
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    className="absolute top-2 right-2 z-10 h-7 w-7"
-                    onClick={clearImage}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+            {imagePreviews.length > 0 && (
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                {imagePreviews.map((preview, index) => (
+                  <div key={index} className="w-full aspect-square relative rounded-md overflow-hidden border">
+                    <Image src={preview} alt={`Image preview ${index + 1}`} fill style={{objectFit: 'cover'}} data-ai-hint="uploaded image" />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-1 right-1 z-10 h-6 w-6"
+                      onClick={() => clearImage(index)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -204,9 +237,9 @@ export function ImageGenerationPanel() {
           <CardFooter className="flex flex-col sm:flex-row gap-2">
             <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
               <Sparkles className="mr-2 h-4 w-4" />
-              {isLoading ? "Generating..." : "Generate"}
+              {isLoading ? "Generating..." : images && images.length > 0 ? "Process Images" : "Generate"}
             </Button>
-            <Button type="button" variant="outline" onClick={handleImprovePrompt} disabled={isImproving || !!image} className="w-full sm:w-auto">
+            <Button type="button" variant="outline" onClick={handleImprovePrompt} disabled={isImproving || (images && images.length > 0)} className="w-full sm:w-auto">
                 <Wand2 className="mr-2 h-4 w-4" />
                 {isImproving ? "Improving..." : "Improve Prompt"}
             </Button>
