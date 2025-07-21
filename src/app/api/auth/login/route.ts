@@ -1,14 +1,7 @@
 
 import { NextResponse } from 'next/server';
-import { SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 import { getDb } from '@/lib/mongodb';
-
-const SECRET_KEY = process.env.JWT_SECRET ? new TextEncoder().encode(process.env.JWT_SECRET) : null;
-
-if (!SECRET_KEY) {
-  throw new Error('JWT_SECRET is not defined in the environment variables.');
-}
 
 export async function POST(request: Request) {
   try {
@@ -17,29 +10,18 @@ export async function POST(request: Request) {
     const db = await getDb();
     const usersCollection = db.collection('users');
 
-    // Find the user by username
     const user = await usersCollection.findOne({ username });
 
     if (!user) {
       return NextResponse.json({ message: 'Invalid username or password' }, { status: 401 });
     }
 
-    // IMPORTANT: Comparing plain text passwords. This is insecure and only for this specific prototype.
-    // In a real application, you should hash passwords during registration and use bcrypt.compare here.
+    // In a real application, you would hash passwords. For this prototype, we are comparing plain text.
     const isPasswordValid = (password === user.password);
 
     if (isPasswordValid) {
-      // User is authenticated, create a JWT
-      const payload = { username: user.username, sub: user._id.toString() };
-      
-      const token = await new SignJWT(payload)
-        .setProtectedHeader({ alg: 'HS256' })
-        .setIssuedAt()
-        .setExpirationTime('1h') // Token expires in 1 hour
-        .sign(SECRET_KEY);
-
-      // Set the token in a secure, HTTP-only cookie
-      cookies().set('auth_token', token, {
+      // User is authenticated. Set a simple, secure, HTTP-only cookie.
+      cookies().set('isLoggedIn', 'true', {
         httpOnly: true,
         secure: process.env.NODE_ENV !== 'development',
         sameSite: 'strict',
@@ -54,6 +36,4 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     console.error('Login error:', error);
-    return NextResponse.json({ message: 'An internal server error occurred' }, { status: 500 });
-  }
-}
+    return NextResponse.json({ message: 'An internal server error occurred' },
