@@ -1,27 +1,25 @@
+
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const loginUrl = new URL('/login', request.url);
-  const homeUrl = new URL('/', request.url);
-  
-  const publicPaths = ['/login', '/signup'];
-
   const isLoggedIn = request.cookies.get('is_logged_in')?.value === 'true';
 
+  const publicPaths = ['/login', '/signup'];
   const isPublicPath = publicPaths.some(p => pathname.startsWith(p));
 
-  if (isLoggedIn) {
-    if (isPublicPath) {
-      return NextResponse.redirect(homeUrl);
-    }
-    return NextResponse.next();
-  } else {
-    if (!isPublicPath) {
-      return NextResponse.redirect(loginUrl);
-    }
-    return NextResponse.next();
+  // If the user is logged in and tries to access a public path like /login, redirect to home
+  if (isLoggedIn && isPublicPath) {
+    return NextResponse.redirect(new URL('/', request.url));
   }
+
+  // If the user is not logged in and tries to access a protected path, redirect to login
+  if (!isLoggedIn && !isPublicPath) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // Otherwise, allow the request to proceed
+  return NextResponse.next();
 }
 
 export const config = {
