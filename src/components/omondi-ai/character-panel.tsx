@@ -273,7 +273,7 @@ export function CharacterPanel() {
                                     <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                     <AlertDialogDescription>
                                       This will permanently delete the character "{char.name}" and its images. This action cannot be undone.
-                                    </Діscription>
+                                    </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
