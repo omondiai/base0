@@ -1,3 +1,4 @@
+
 import { AIToolsTabs } from "@/components/omondi-ai/ai-tools-tabs";
 import { DrawingCanvas } from "@/components/omondi-ai/drawing-canvas";
 import { Header } from "@/components/omondi-ai/header";

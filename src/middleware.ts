@@ -1,0 +1,57 @@
+
+import { NextResponse, type NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
+
+const SECRET_KEY = process.env.JWT_SECRET || new TextEncoder().encode('a-secure-secret-for-jwt-that-is-at-least-32-bytes-long');
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Define public paths that don't require authentication
+  const publicPaths = ['/login'];
+
+  // If the path is public, let the request through
+  if (publicPaths.some(path => pathname.startsWith(path))) {
+    return NextResponse.next();
+  }
+
+  // Get the token from cookies
+  const token = request.cookies.get('auth_token')?.value;
+
+  if (!token) {
+    // If no token, redirect to login page
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    return NextResponse.redirect(url);
+  }
+
+  try {
+    // Verify the token
+    await jwtVerify(token, SECRET_KEY);
+    // If token is valid, proceed with the request
+    return NextResponse.next();
+  } catch (err) {
+    // If token is invalid (e.g., expired or malformed), redirect to login
+    console.error('JWT Verification Error:', err);
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    // Also clear the invalid cookie
+    const response = NextResponse.redirect(url);
+    response.cookies.set('auth_token', '', { maxAge: 0 });
+    return response;
+  }
+}
+
+// See "Matching Paths" below to learn more
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
+};
