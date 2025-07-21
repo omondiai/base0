@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 export async function POST() {
   try {
     // Clear the authentication cookie by setting its expiry date to the past.
-    cookies().set('isLoggedIn', '', {
+    cookies().set('auth_token', '', {
       httpOnly: true,
       secure: process.env.NODE_ENV !== 'development',
       sameSite: 'strict',

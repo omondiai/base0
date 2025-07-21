@@ -1,31 +1,49 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
+
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET as string);
+
+async function verifyJwt(token: string) {
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    return payload;
+  } catch (error) {
+    return null;
+  }
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
-  // Check for the simple "is logged in" cookie
-  const isLoggedIn = request.cookies.get('isLoggedIn')?.value === 'true';
-
+  const authToken = request.cookies.get('auth_token')?.value;
   const isLoginPage = pathname.startsWith('/login');
-
-  // If the user is logged in and tries to access the login page, redirect them to the homepage
-  if (isLoggedIn && isLoginPage) {
-    return NextResponse.redirect(new URL('/', request.url));
+  
+  let userPayload = null;
+  if (authToken) {
+    userPayload = await verifyJwt(authToken);
   }
 
-  // If the user is not logged in and is trying to access any page other than the login page,
+  // If the user is authenticated (has a valid token)
+  if (userPayload) {
+    // and tries to access the login page, redirect them to the homepage
+    if (isLoginPage) {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+    // Otherwise, allow them to proceed
+    return NextResponse.next();
+  }
+
+  // If the user is not authenticated
+  // and is trying to access any page other than the login page,
   // redirect them to the login page.
-  if (!isLoggedIn && !isLoginPage) {
+  if (!isLoginPage) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // Allow the request to proceed if:
-  // 1. The user is logged in and accessing any page other than the login page.
-  // 2. The user is not logged in and is accessing the login page.
+  // Allow unauthenticated users to access the login page
   return NextResponse.next();
 }
 
-// See "Matching Paths" below to learn more
 export const config = {
   matcher: [
     /*

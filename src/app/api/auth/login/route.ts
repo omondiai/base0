@@ -2,10 +2,18 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getDb } from '@/lib/mongodb';
+import { SignJWT } from 'jose';
+
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET as string);
+const ALG = 'HS256';
 
 export async function POST(request: Request) {
   try {
     const { username, password } = await request.json();
+
+    if (!process.env.JWT_SECRET) {
+        throw new Error('JWT_SECRET environment variable is not set.');
+    }
 
     const db = await getDb();
     const usersCollection = db.collection('users');
@@ -15,13 +23,19 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ message: 'Invalid username or password' }, { status: 401 });
     }
-
-    // In a real application, you would hash passwords. For this prototype, we are comparing plain text.
+    
     const isPasswordValid = (password === user.password);
 
     if (isPasswordValid) {
-      // User is authenticated. Set a simple, secure, HTTP-only cookie.
-      cookies().set('isLoggedIn', 'true', {
+      // Create JWT
+      const token = await new SignJWT({ username: user.username, id: user._id })
+        .setProtectedHeader({ alg: ALG })
+        .setIssuedAt()
+        .setExpirationTime('1h') // Token expires in 1 hour
+        .sign(JWT_SECRET);
+        
+      // Set token in a secure, HTTP-only cookie
+      cookies().set('auth_token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV !== 'development',
         sameSite: 'strict',
