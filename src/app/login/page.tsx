@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -55,7 +56,9 @@ export default function LoginPage() {
         body: JSON.stringify(data),
       });
 
-      if (response.ok) {
+      const responseData = await response.json();
+
+      if (response.ok && responseData.success) {
         toast({
           title: "Login Successful",
           description: "Welcome back! Redirecting...",
@@ -63,8 +66,7 @@ export default function LoginPage() {
         // Use a full page navigation to ensure the middleware re-evaluates the auth state.
         window.location.assign("/");
       } else {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Invalid credentials.");
+        throw new Error(responseData.message || "Invalid credentials.");
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";

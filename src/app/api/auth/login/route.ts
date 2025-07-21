@@ -30,7 +30,7 @@ export async function POST(request: Request) {
         maxAge: 60 * 60, // 1 hour
       });
 
-      return NextResponse.json({ message: 'Authentication successful' }, { status: 200 });
+      return NextResponse.json({ success: true, message: 'Authentication successful' }, { status: 200 });
     } else {
       // Invalid credentials
       return NextResponse.json({ message: 'Invalid username or password' }, { status: 401 });
