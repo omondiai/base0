@@ -29,9 +29,9 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Scenario 1: User is logged in (has a valid token)
+  // If the user is authenticated
   if (isTokenValid) {
-    // If they try to access the login page, redirect them to the homepage.
+    // And they try to access the login page, redirect them to the homepage.
     if (isLoginPage) {
       return NextResponse.redirect(new URL('/', request.url));
     }
@@ -39,9 +39,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Scenario 2: User is NOT logged in (no valid token)
+  // If the user is NOT authenticated
   if (!isTokenValid) {
-    // If they are trying to access any page other than the login page, redirect them to login.
+    // And they are trying to access any page OTHER than the login page,
+    // redirect them to the login page.
     if (!isLoginPage) {
       const response = NextResponse.redirect(new URL('/login', request.url));
       // It's good practice to clear any invalid token cookie
@@ -50,10 +51,11 @@ export async function middleware(request: NextRequest) {
       }
       return response;
     }
-    // If they are already on the login page, let them stay.
+    // If they are on the login page, let them stay.
     return NextResponse.next();
   }
 
+  // Fallback, should not be reached
   return NextResponse.next();
 }
 
