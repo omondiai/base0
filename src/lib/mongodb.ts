@@ -5,8 +5,6 @@ if (!uri) {
   throw new Error('Please define the MONGODB_URI environment variable inside .env');
 }
 
-// Using a global variable to maintain a cached connection across hot reloads in development.
-// This prevents connecting to the database on every request.
 let cachedClient: MongoClient | null = null;
 let cachedDb: any = null;
 
@@ -27,10 +25,6 @@ async function connectToDatabase() {
     await client.connect();
     console.log("Successfully connected to MongoDB!");
     const db = client.db('omondi_ai_db'); 
-    
-    // NOTE: The default user ('omondiai', 'omondipa2@gmail.com') is expected to exist.
-    // This can be added directly to your MongoDB instance.
-    // The automatic user creation has been removed to prevent connection issues.
 
     cachedClient = client;
     cachedDb = db;

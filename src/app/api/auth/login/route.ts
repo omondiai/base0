@@ -1,11 +1,15 @@
-
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getDb } from '@/lib/mongodb';
+import bcrypt from 'bcryptjs';
 
 export async function POST(request: Request) {
   try {
     const { username, password } = await request.json();
+
+    if (!username || !password) {
+        return NextResponse.json({ message: 'Username and password are required' }, { status: 400 });
+    }
 
     const db = await getDb();
     const usersCollection = db.collection('users');
@@ -16,12 +20,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Invalid username or password' }, { status: 401 });
     }
     
-    // NOTE: In a production app, passwords should be hashed.
-    // Comparing plain text passwords as per the current requirement.
-    const isPasswordValid = (password === user.password);
+    const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (isPasswordValid) {
-      // Set a simple session cookie
       cookies().set('is_logged_in', 'true', {
         httpOnly: true,
         secure: process.env.NODE_ENV !== 'development',
@@ -32,7 +33,6 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ success: true, message: 'Authentication successful' }, { status: 200 });
     } else {
-      // Invalid credentials
       return NextResponse.json({ message: 'Invalid username or password' }, { status: 401 });
     }
   } catch (error) {
