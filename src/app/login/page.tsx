@@ -59,7 +59,7 @@ export default function LoginPage() {
       if (response.ok) {
         toast({
           title: "Login Successful",
-          description: "Welcome back!",
+          description: "Welcome back! Redirecting...",
         });
         // A full page navigation is the most reliable way to trigger the middleware
         // to re-evaluate the auth state and redirect to the correct page.
