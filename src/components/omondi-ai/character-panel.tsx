@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, ChangeEvent, useEffect } from "react";
@@ -28,8 +29,8 @@ const MAX_STORAGE_BYTES = MAX_STORAGE_MB * 1024 * 1024;
 const formSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters."),
   images: z.array(z.any())
-    .min(5, "Please upload between 5 and 10 images.")
-    .max(10, "Please upload between 5 and 10 images."),
+    .min(5, "Please upload at least 5 images.")
+    .max(10, "You can upload a maximum of 10 images."),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -74,7 +75,7 @@ export function CharacterPanel() {
 
   useEffect(() => {
     fetchCharacters();
-  }, [toast]);
+  }, []);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -272,7 +273,7 @@ export function CharacterPanel() {
                                     <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                     <AlertDialogDescription>
                                       This will permanently delete the character "{char.name}" and its images. This action cannot be undone.
-                                    </AlertDialogDescription>
+                                    </Діscription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
