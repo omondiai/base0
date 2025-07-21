@@ -24,38 +24,29 @@ export async function middleware(request: NextRequest) {
       await jwtVerify(token, SECRET_KEY);
       isTokenValid = true;
     } catch (err) {
-      // Token is invalid, will be treated as if no token exists.
       isTokenValid = false;
     }
   }
 
-  // If the user is authenticated
-  if (isTokenValid) {
-    // And they try to access the login page, redirect them to the homepage.
-    if (isLoginPage) {
-      return NextResponse.redirect(new URL('/', request.url));
-    }
-    // Otherwise, allow them to access any other page.
-    return NextResponse.next();
+  // If the user is authenticated and tries to visit the login page, redirect them to the homepage.
+  if (isTokenValid && isLoginPage) {
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
-  // If the user is NOT authenticated
-  if (!isTokenValid) {
-    // And they are trying to access any page OTHER than the login page,
-    // redirect them to the login page.
-    if (!isLoginPage) {
-      const response = NextResponse.redirect(new URL('/login', request.url));
-      // It's good practice to clear any invalid token cookie
-      if (token) {
-         response.cookies.set('auth_token', '', { maxAge: 0 });
-      }
-      return response;
+  // If the user is not authenticated and tries to visit any page other than the login page, redirect them to the login page.
+  if (!isTokenValid && !isLoginPage) {
+    const response = NextResponse.redirect(new URL('/login', request.url));
+    // It's good practice to clear any invalid token cookie
+    if (token) {
+       response.cookies.set('auth_token', '', { maxAge: 0 });
     }
-    // If they are on the login page, let them stay.
-    return NextResponse.next();
+    return response;
   }
 
-  // Fallback, should not be reached
+  // If none of the above conditions are met, allow the request to proceed.
+  // This covers:
+  // - Authenticated users accessing any page other than login.
+  // - Unauthenticated users accessing the login page.
   return NextResponse.next();
 }
 
