@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { getDb } from '@/lib/mongodb';
 import { SignJWT } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET as string);
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!);
 const ALG = 'HS256';
 
 export async function POST(request: Request) {
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     const { username, password } = await request.json();
 
     if (!process.env.JWT_SECRET) {
-        throw new Error('JWT_SECRET environment variable is not set.');
+      throw new Error('JWT_SECRET environment variable is not set.');
     }
 
     const db = await getDb();
@@ -24,11 +24,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Invalid username or password' }, { status: 401 });
     }
     
+    // NOTE: In a production app, passwords should be hashed.
+    // Comparing plain text passwords as per the current requirement.
     const isPasswordValid = (password === user.password);
 
     if (isPasswordValid) {
       // Create JWT
-      const token = await new SignJWT({ username: user.username, id: user._id })
+      const token = await new SignJWT({ username: user.username, id: user._id.toString() })
         .setProtectedHeader({ alg: ALG })
         .setIssuedAt()
         .setExpirationTime('1h') // Token expires in 1 hour
