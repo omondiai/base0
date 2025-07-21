@@ -2,18 +2,10 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getDb } from '@/lib/mongodb';
-import { SignJWT } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!);
-const ALG = 'HS256';
 
 export async function POST(request: Request) {
   try {
     const { username, password } = await request.json();
-
-    if (!process.env.JWT_SECRET) {
-      throw new Error('JWT_SECRET environment variable is not set.');
-    }
 
     const db = await getDb();
     const usersCollection = db.collection('users');
@@ -29,15 +21,8 @@ export async function POST(request: Request) {
     const isPasswordValid = (password === user.password);
 
     if (isPasswordValid) {
-      // Create JWT
-      const token = await new SignJWT({ username: user.username, id: user._id.toString() })
-        .setProtectedHeader({ alg: ALG })
-        .setIssuedAt()
-        .setExpirationTime('1h') // Token expires in 1 hour
-        .sign(JWT_SECRET);
-        
-      // Set token in a secure, HTTP-only cookie
-      cookies().set('auth_token', token, {
+      // Set a simple session cookie
+      cookies().set('is_logged_in', 'true', {
         httpOnly: true,
         secure: process.env.NODE_ENV !== 'development',
         sameSite: 'strict',

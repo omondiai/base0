@@ -1,47 +1,31 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { jwtVerify } from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!);
-
-async function verifyJwt(token: string) {
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    return payload;
-  } catch (error) {
-    return null;
-  }
-}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const loginUrl = new URL('/login', request.url);
   const homeUrl = new URL('/', request.url);
 
-  // 1. Get token from cookies
-  const authToken = request.cookies.get('auth_token')?.value;
+  // 1. Check for the session cookie
+  const isLoggedIn = request.cookies.get('is_logged_in')?.value === 'true';
 
-  // 2. Verify token
-  const userPayload = authToken ? await verifyJwt(authToken) : null;
-  const isAuthenticated = !!userPayload;
-
-  // 3. Handle public and protected routes
-  if (pathname.startsWith('/login')) {
-    // If user is authenticated and on the login page, redirect to home
-    if (isAuthenticated) {
+  // 2. Handle redirection logic
+  if (isLoggedIn) {
+    // If the user is logged in and tries to access the login page,
+    // redirect them to the homepage.
+    if (pathname.startsWith('/login')) {
       return NextResponse.redirect(homeUrl);
     }
-    // Otherwise, allow access to the login page
+    // Otherwise, allow access to the requested page.
+    return NextResponse.next();
+  } else {
+    // If the user is not logged in and is trying to access any page
+    // other than the login page, redirect them to the login page.
+    if (!pathname.startsWith('/login')) {
+      return NextResponse.redirect(loginUrl);
+    }
+    // Allow access to the login page for non-logged-in users.
     return NextResponse.next();
   }
-
-  // For all other routes (protected routes)
-  // If user is not authenticated, redirect to login page
-  if (!isAuthenticated) {
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // If user is authenticated, allow access to the protected route
-  return NextResponse.next();
 }
 
 export const config = {
