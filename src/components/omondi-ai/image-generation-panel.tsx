@@ -65,14 +65,14 @@ export function ImageGenerationPanel() {
       }
     }
     fetchCharacters();
-  }, []);
+  }, [toast]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       description: "",
       images: [],
-      characterId: undefined,
+      characterId: "none",
     },
   });
 
@@ -84,7 +84,7 @@ export function ImageGenerationPanel() {
       const combinedFiles = [...currentFiles, ...newFiles];
       
       form.setValue("images", combinedFiles, { shouldValidate: true });
-      form.setValue("characterId", undefined); // Can't use character and upload enhancement images
+      form.setValue("characterId", "none"); // Can't use character and upload enhancement images
 
       const newPreviews: string[] = [];
       const filePromises = newFiles.map(file => {
@@ -135,7 +135,7 @@ export function ImageGenerationPanel() {
 
     try {
       let result;
-      if (data.characterId) {
+      if (data.characterId && data.characterId !== 'none') {
         const selectedCharacter = characters.find(c => c._id === data.characterId);
         if (!selectedCharacter) throw new Error("Selected character not found.");
         
@@ -196,10 +196,10 @@ export function ImageGenerationPanel() {
   const hasImages = images && images.length > 0;
   const hasMultipleImages = hasImages && images.length > 1;
   const disableCharacterSelect = hasImages;
-  const disableImageUpload = !!characterId;
+  const disableImageUpload = !!characterId && characterId !== 'none';
 
   const getPlaceholder = () => {
-    if (characterId) return "e.g., 'photo of my character reading a book in a cafe'";
+    if (characterId && characterId !== 'none') return "e.g., 'photo of my character reading a book in a cafe'";
     if (hasMultipleImages) return "e.g., 'Combine these into a photo grid'";
     if (hasImages) return "e.g., 'Make this photo look more vibrant'";
     return "A futuristic cityscape at sunset...";
@@ -224,7 +224,9 @@ export function ImageGenerationPanel() {
                   <FormLabel>Use Saved Character (Optional)</FormLabel>
                   <Select onValueChange={(value) => {
                       field.onChange(value);
-                      cleanup(); // Clear uploaded images if a character is selected
+                      if (value !== 'none') {
+                        cleanup(); // Clear uploaded images if a character is selected
+                      }
                   }} defaultValue={field.value} disabled={disableCharacterSelect}>
                     <FormControl>
                       <SelectTrigger>
