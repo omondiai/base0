@@ -1,5 +1,4 @@
 import { MongoClient, ServerApiVersion } from 'mongodb';
-import bcrypt from 'bcryptjs';
 
 const uri = process.env.MONGODB_URI;
 if (!uri) {
@@ -29,8 +28,9 @@ async function connectToDatabase() {
     console.log("Successfully connected to MongoDB!");
     const db = client.db('omondi_ai_db'); 
     
-    // Ensure the default user exists
-    await ensureDefaultUser(db);
+    // NOTE: The default user ('omondiai', 'omondipa2@gmail.com') is expected to exist.
+    // This can be added directly to your MongoDB instance.
+    // The automatic user creation has been removed to prevent connection issues.
 
     cachedClient = client;
     cachedDb = db;
@@ -45,26 +45,4 @@ async function connectToDatabase() {
 export async function getDb() {
     const { db } = await connectToDatabase();
     return db;
-}
-
-async function ensureDefaultUser(db: any) {
-    const usersCollection = db.collection('users');
-    const defaultUsername = 'omondiai';
-    const defaultPassword = 'omondipa2@gmail.com';
-
-    const existingUser = await usersCollection.findOne({ username: defaultUsername });
-
-    if (!existingUser) {
-        console.log(`User '${defaultUsername}' not found. Creating default user...`);
-        // In a real app, you would hash the password.
-        // For this prototype, we'll store it as plain text as per the original logic,
-        // but note this is NOT secure for production.
-        // const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-        await usersCollection.insertOne({
-            username: defaultUsername,
-            password: defaultPassword, // Storing plain text password as requested for prototype
-            createdAt: new Date(),
-        });
-        console.log("Default user created successfully.");
-    }
 }
