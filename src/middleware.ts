@@ -8,60 +8,53 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get('auth_token')?.value;
 
-  // Define public paths that don't require authentication
-  const publicPaths = ['/login'];
-  const isPublicPath = publicPaths.some(path => pathname.startsWith(path));
+  // The only public path is the login page.
+  const isPublicPath = pathname === '/login';
 
-  // If the user has a valid token and tries to access a public path like /login,
-  // redirect them to the home page.
-  if (token && isPublicPath) {
+  // If the path is protected, we need to verify the token.
+  if (!isPublicPath) {
+    if (!token) {
+      // No token, redirect to login.
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    if (!SECRET_KEY) {
+      console.error('JWT_SECRET is not configured on the server.');
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
     try {
-      if (SECRET_KEY) {
-        await jwtVerify(token, SECRET_KEY);
-        // Token is valid, redirect to home
-        return NextResponse.redirect(new URL('/', request.url));
-      }
+      // Verify the token for the protected route.
+      await jwtVerify(token, SECRET_KEY);
+      // Token is valid, allow access.
+      return NextResponse.next();
     } catch (err) {
-      // Token is invalid, let them stay on the login page by doing nothing here.
+      // Token is invalid (expired, malformed, etc.), redirect to login.
+      console.error('JWT Verification Error:', err);
+      const response = NextResponse.redirect(new URL('/login', request.url));
+      // Clear the invalid cookie.
+      response.cookies.set('auth_token', '', { maxAge: 0 });
+      return response;
     }
   }
 
-  // If the path is public and there's no token (or it's invalid), let the request through
-  if (isPublicPath) {
-    return NextResponse.next();
+  // If the path is public (i.e., /login), check if the user is already logged in.
+  if (isPublicPath && token) {
+    try {
+      if (SECRET_KEY) {
+        // Verify the token.
+        await jwtVerify(token, SECRET_KEY);
+        // Token is valid, so the user is logged in. Redirect them to the homepage.
+        return NextResponse.redirect(new URL('/', request.url));
+      }
+    } catch (err) {
+      // Token is invalid. Let the user stay on the login page to re-authenticate.
+      return NextResponse.next();
+    }
   }
 
-  // At this point, the path is a protected route.
-
-  // If no token, redirect to login page
-  if (!token) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    return NextResponse.redirect(url);
-  }
-
-  if (!SECRET_KEY) {
-    console.error('JWT_SECRET is not configured on the server.');
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    return NextResponse.redirect(url);
-  }
-
-  try {
-    // Verify the token for protected routes
-    await jwtVerify(token, SECRET_KEY);
-    // If token is valid, proceed with the request
-    return NextResponse.next();
-  } catch (err) {
-    // If token is invalid (e.g., expired or malformed), redirect to login
-    console.error('JWT Verification Error:', err);
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    // Also clear the invalid cookie
-    const response = NextResponse.redirect(url);
-    response.cookies.set('auth_token', '', { maxAge: 0 });
-    return response;
-  }
+  // If it's a public path and there's no token, or an invalid one, allow the request.
+  return NextResponse.next();
 }
 
 // See "Matching Paths" below to learn more

@@ -2,7 +2,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -35,7 +34,6 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 export default function LoginPage() {
-  const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -61,10 +59,10 @@ export default function LoginPage() {
       if (response.ok) {
         toast({
           title: "Login Successful",
-          description: "Welcome back, Paul!",
+          description: "Welcome back!",
         });
-        // Instead of router.push, we do a full page navigation.
-        // This ensures the middleware is re-run and the new auth state is picked up correctly.
+        // A full page navigation is the most reliable way to trigger the middleware
+        // to re-evaluate the auth state and redirect to the correct page.
         window.location.assign("/");
       } else {
         const errorData = await response.json();
