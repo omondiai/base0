@@ -61,8 +61,7 @@ export default function LoginPage() {
           title: "Login Successful",
           description: "Welcome back! Redirecting...",
         });
-        // A full page navigation is the most reliable way to trigger the middleware
-        // to re-evaluate the auth state and redirect to the correct page.
+        // Use a full page navigation to ensure the middleware re-evaluates the auth state.
         window.location.assign("/");
       } else {
         const errorData = await response.json();
