@@ -1,6 +1,5 @@
 
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { getDb } from '@/lib/mongodb';
 import bcrypt from 'bcryptjs';
 
@@ -24,15 +23,13 @@ export async function POST(request: Request) {
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (isPasswordValid) {
-      cookies().set('is_logged_in', 'true', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV !== 'development',
-        sameSite: 'strict',
-        path: '/',
-        maxAge: 60 * 60, // 1 hour
-      });
+      const response = NextResponse.json({ success: true, message: 'Authentication successful' }, { status: 200 });
+      
+      const cookieString = `is_logged_in=true; HttpOnly; Path=/; Max-Age=${60 * 60}; SameSite=Strict${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
+      
+      response.headers.set('Set-Cookie', cookieString);
 
-      return NextResponse.json({ success: true, message: 'Authentication successful' }, { status: 200 });
+      return response;
     } else {
       return NextResponse.json({ message: 'Invalid username or password' }, { status: 401 });
     }
