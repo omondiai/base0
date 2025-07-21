@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import { SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 import { getDb } from '@/lib/mongodb';
-import bcrypt from 'bcryptjs';
 
 const SECRET_KEY = process.env.JWT_SECRET ? new TextEncoder().encode(process.env.JWT_SECRET) : null;
 
@@ -24,11 +23,9 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ message: 'Invalid username or password' }, { status: 401 });
     }
-    
-    // For this example, let's assume the password in the database is plain text 'omondipa2@gmail.com'
-    // In a real application, you should hash passwords.
-    // Let's compare the provided password with the one in the DB.
-    // Note: The prompt implies a plain text password check. In a real-world scenario, you would use something like bcrypt.compare
+
+    // IMPORTANT: Comparing plain text passwords. This is insecure and only for this specific prototype.
+    // In a real application, you should hash passwords during registration and use bcrypt.compare here.
     const isPasswordValid = (password === user.password);
 
     if (isPasswordValid) {
