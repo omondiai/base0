@@ -63,9 +63,9 @@ export default function LoginPage() {
           title: "Login Successful",
           description: "Welcome back, Paul!",
         });
-        // Instead of router.push, we'll do a full page reload to the homepage.
+        // Instead of router.push, we do a full page navigation.
         // This ensures the middleware is re-run and the new auth state is picked up correctly.
-        window.location.href = "/";
+        window.location.assign("/");
       } else {
         const errorData = await response.json();
         throw new Error(errorData.message || "Invalid credentials.");
