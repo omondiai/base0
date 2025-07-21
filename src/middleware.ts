@@ -2,7 +2,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const SECRET_KEY = process.env.JWT_SECRET || new TextEncoder().encode('a-secure-secret-for-jwt-that-is-at-least-32-bytes-long');
+const SECRET_KEY = process.env.JWT_SECRET ? new TextEncoder().encode(process.env.JWT_SECRET) : null;
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -20,6 +20,13 @@ export async function middleware(request: NextRequest) {
 
   if (!token) {
     // If no token, redirect to login page
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    return NextResponse.redirect(url);
+  }
+
+  if (!SECRET_KEY) {
+    console.error('JWT_SECRET is not configured on the server.');
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);

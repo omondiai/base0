@@ -2,21 +2,38 @@
 import { NextResponse } from 'next/server';
 import { SignJWT } from 'jose';
 import { cookies } from 'next/headers';
+import { getDb } from '@/lib/mongodb';
+import bcrypt from 'bcryptjs';
 
-const SECRET_KEY = process.env.JWT_SECRET || new TextEncoder().encode('a-secure-secret-for-jwt-that-is-at-least-32-bytes-long');
+const SECRET_KEY = process.env.JWT_SECRET ? new TextEncoder().encode(process.env.JWT_SECRET) : null;
+
+if (!SECRET_KEY) {
+  throw new Error('JWT_SECRET is not defined in the environment variables.');
+}
 
 export async function POST(request: Request) {
   try {
     const { username, password } = await request.json();
 
-    // These are the credentials provided in the prompt.
-    // In a real application, you would validate against a database.
-    const validUsername = "omondiai";
-    const validPassword = "omondipa2@gmail.com";
+    const db = await getDb();
+    const usersCollection = db.collection('users');
 
-    if (username === validUsername && password === validPassword) {
+    // Find the user by username
+    const user = await usersCollection.findOne({ username });
+
+    if (!user) {
+      return NextResponse.json({ message: 'Invalid username or password' }, { status: 401 });
+    }
+    
+    // For this example, let's assume the password in the database is plain text 'omondipa2@gmail.com'
+    // In a real application, you should hash passwords.
+    // Let's compare the provided password with the one in the DB.
+    // Note: The prompt implies a plain text password check. In a real-world scenario, you would use something like bcrypt.compare
+    const isPasswordValid = (password === user.password);
+
+    if (isPasswordValid) {
       // User is authenticated, create a JWT
-      const payload = { username, sub: 'user_omondi_ai' };
+      const payload = { username: user.username, sub: user._id.toString() };
       
       const token = await new SignJWT(payload)
         .setProtectedHeader({ alg: 'HS256' })

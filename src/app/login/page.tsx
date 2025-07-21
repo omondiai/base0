@@ -42,8 +42,8 @@ export default function LoginPage() {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      username: "",
-      password: "",
+      username: "omondiai",
+      password: "omondipa2@gmail.com",
     },
   });
 
@@ -63,8 +63,9 @@ export default function LoginPage() {
           title: "Login Successful",
           description: "Welcome back, Paul!",
         });
-        router.push("/");
-        router.refresh(); // Ensures the middleware re-evaluates and layout re-renders
+        // Instead of router.push, we'll do a full page reload to the homepage.
+        // This ensures the middleware is re-run and the new auth state is picked up correctly.
+        window.location.href = "/";
       } else {
         const errorData = await response.json();
         throw new Error(errorData.message || "Invalid credentials.");
