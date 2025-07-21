@@ -7,3 +7,4 @@ import '@/ai/flows/transfer-style-from-image.ts';
 import '@/ai/flows/chat-flow.ts';
 import '@/ai/flows/enhance-image-flow.ts';
 import '@/ai/flows/generate-video-flow.ts';
+import '@/ai/flows/generate-image-with-character.ts';

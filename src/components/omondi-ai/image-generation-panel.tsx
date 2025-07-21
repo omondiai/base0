@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, ChangeEvent } from "react";
+import { useState, ChangeEvent, useEffect } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { generateImageFromDescription, enhanceImage, improveImageGenerationPrompt } from "@/ai/flows";
+import { generateImageFromDescription, enhanceImage, improveImageGenerationPrompt, generateImageWithCharacter } from "@/ai/flows";
 import { useToast } from "@/hooks/use-toast";
 import {
   Card,
@@ -21,12 +21,16 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import Image from "next/image";
 import { Download, Sparkles, Wand2, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import type { Character } from "./character-panel";
+
 
 const formSchema = z.object({
   description: z.string().optional(),
   images: z.array(z.any()).optional(),
+  characterId: z.string().optional(),
 }).refine(data => !!data.description || (data.images && data.images.length > 0), {
-  message: "Please provide a description or upload at least one image.",
+  message: "Please provide a description.",
   path: ["description"],
 });
 
@@ -46,12 +50,29 @@ export function ImageGenerationPanel() {
   const [isLoading, setIsLoading] = useState(false);
   const [isImproving, setIsImproving] = useState(false);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [characters, setCharacters] = useState<Character[]>([]);
+
+  useEffect(() => {
+    async function fetchCharacters() {
+      try {
+        const response = await fetch('/api/characters');
+        if (!response.ok) throw new Error("Failed to fetch characters");
+        const data = await response.json();
+        setCharacters(data.characters);
+      } catch (error) {
+        console.error(error);
+        toast({ variant: "destructive", title: "Error", description: "Could not load saved characters."});
+      }
+    }
+    fetchCharacters();
+  }, []);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       description: "",
       images: [],
+      characterId: undefined,
     },
   });
 
@@ -63,6 +84,7 @@ export function ImageGenerationPanel() {
       const combinedFiles = [...currentFiles, ...newFiles];
       
       form.setValue("images", combinedFiles, { shouldValidate: true });
+      form.setValue("characterId", undefined); // Can't use character and upload enhancement images
 
       const newPreviews: string[] = [];
       const filePromises = newFiles.map(file => {
@@ -105,24 +127,31 @@ export function ImageGenerationPanel() {
     setIsLoading(true);
     setImageUrl(null);
 
+    if (!data.description) {
+      toast({ variant: "destructive", title: "Description Required", description: "Please enter a prompt for the image." });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       let result;
-      if (data.images && data.images.length > 0) {
+      if (data.characterId) {
+        const selectedCharacter = characters.find(c => c._id === data.characterId);
+        if (!selectedCharacter) throw new Error("Selected character not found.");
+        
+        result = await generateImageWithCharacter({
+          prompt: data.description,
+          characterImages: selectedCharacter.images.map(img => img.dataUri),
+        });
+
+      } else if (data.images && data.images.length > 0) {
         const imageBase64s = await Promise.all(data.images.map(toBase64));
         result = await enhanceImage({
           images: imageBase64s,
           prompt: data.description,
         });
-      } else if (data.description) {
-        result = await generateImageFromDescription({ description: data.description });
       } else {
-        toast({
-          variant: "destructive",
-          title: "Invalid Input",
-          description: "Please provide a description or at least one image.",
-        });
-        setIsLoading(false);
-        return;
+        result = await generateImageFromDescription({ description: data.description });
       }
 
       if (result.imageUrl) {
@@ -163,12 +192,16 @@ export function ImageGenerationPanel() {
   }
   
   const images = form.watch("images");
+  const characterId = form.watch("characterId");
   const hasImages = images && images.length > 0;
   const hasMultipleImages = hasImages && images.length > 1;
+  const disableCharacterSelect = hasImages;
+  const disableImageUpload = !!characterId;
 
   const getPlaceholder = () => {
-    if (hasMultipleImages) return "e.g., 'Combine these into a photo grid' or 'Which one looks better?'";
-    if (hasImages) return "e.g., 'Make this photo look more vibrant' or 'Turn this into a painting'";
+    if (characterId) return "e.g., 'photo of my character reading a book in a cafe'";
+    if (hasMultipleImages) return "e.g., 'Combine these into a photo grid'";
+    if (hasImages) return "e.g., 'Make this photo look more vibrant'";
     return "A futuristic cityscape at sunset...";
   }
 
@@ -177,12 +210,41 @@ export function ImageGenerationPanel() {
       <CardHeader>
         <CardTitle className="font-headline">Image Generation & Enhancement</CardTitle>
         <CardDescription>
-          Describe the image you want, or upload images to combine and enhance.
+          Use a character, describe a new image, or upload images to enhance.
         </CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <CardContent className="space-y-4">
+            <FormField
+              control={form.control}
+              name="characterId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Use Saved Character (Optional)</FormLabel>
+                  <Select onValueChange={(value) => {
+                      field.onChange(value);
+                      cleanup(); // Clear uploaded images if a character is selected
+                  }} defaultValue={field.value} disabled={disableCharacterSelect}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a character" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {characters.map(char => (
+                        <SelectItem key={char._id} value={char._id}>
+                          {char.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <FormField
               control={form.control}
               name="description"
@@ -204,7 +266,7 @@ export function ImageGenerationPanel() {
             
             <div className="relative flex items-center">
                 <div className="flex-grow border-t border-muted"></div>
-                <span className="flex-shrink mx-4 text-muted-foreground text-xs">OR UPLOAD</span>
+                <span className="flex-shrink mx-4 text-muted-foreground text-xs">OR UPLOAD (ENHANCE)</span>
                 <div className="flex-grow border-t border-muted"></div>
             </div>
 
@@ -215,8 +277,9 @@ export function ImageGenerationPanel() {
                 <FormItem>
                   <FormLabel>Upload Images to Enhance/Combine</FormLabel>
                   <FormControl>
-                    <Input id="image-upload" type="file" accept="image/*" onChange={handleFileChange} multiple />
+                    <Input id="image-upload" type="file" accept="image/*" onChange={handleFileChange} multiple disabled={disableImageUpload} />
                   </FormControl>
+                  {disableImageUpload && <p className="text-xs text-muted-foreground">Cannot upload images when a character is selected.</p>}
                   <FormMessage />
                 </FormItem>
               )}
@@ -245,7 +308,7 @@ export function ImageGenerationPanel() {
           <CardFooter className="flex flex-col sm:flex-row gap-2">
             <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
               <Sparkles className="mr-2 h-4 w-4" />
-              {isLoading ? "Generating..." : hasImages ? "Process Images" : "Generate"}
+              {isLoading ? "Generating..." : "Generate"}
             </Button>
             <Button type="button" variant="outline" onClick={handleImprovePrompt} disabled={isImproving || hasImages} className="w-full sm:w-auto">
                 <Wand2 className="mr-2 h-4 w-4" />
