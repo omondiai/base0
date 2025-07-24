@@ -50,19 +50,28 @@ const generateImageWithCharacterFlow = ai.defineFlow(
     outputSchema: GenerateImageWithCharacterOutputSchema,
   },
   async input => {
-    const systemPrompt = `You are an expert image generation AI. Your task is to create a new image based on a user's prompt, featuring a specific character provided through a set of reference images.
-    It is crucial that you maintain the character's identity, including their facial features, skin tone, and body shape, exactly as shown in the reference images.
-    Place this exact character into the scene described by the user's prompt.`;
+    const systemPrompt = `You are an expert image generation AI that functions like a fine-tuned model (such as LoRA or Dreambooth). Your primary task is to create a new image featuring a specific character provided through a set of reference images.
 
-    const promptParts: (MediaPart | string)[] = [systemPrompt];
-    
+    **CRITICAL INSTRUCTION: IDENTITY PRESERVATION**
+    You MUST treat the provided reference images as a visual fingerprint or identity vector for a single, unique individual. Your absolute highest priority is to maintain this character's identity with 100% accuracy.
+    - **Facial Features:** Replicate the eyes, nose, mouth, jawline, and all other facial structures EXACTLY as shown.
+    - **Skin Tone:** Match the skin tone precisely across all lighting conditions.
+    - **Body Shape:** Preserve the character's body type and structure.
+    - **Unique Identifiers:** Pay close attention to any unique moles, scars, or tattoos if they are visible.
+
+    You will now receive a set of reference images for the character, followed by a user prompt describing the scene. Place the IDENTICAL character from the reference images into the scene described by the user's prompt. Do NOT deviate from the character's learned appearance.`;
+
+    const promptParts: (MediaPart | {text: string})[] = [{text: systemPrompt}];
+
     // Add all character reference images
     input.characterImages.forEach(image => {
-      promptParts.push({ media: { url: image } });
+      promptParts.push({media: {url: image}});
     });
-    
+
     // Add the user's text prompt
-    promptParts.push(`User prompt: "${input.prompt}"`);
+    promptParts.push({
+      text: `User Scene Prompt: "${input.prompt}". Generate an image placing the character from the reference photos into this scene.`,
+    });
 
     const {media} = await ai.generate({
       model: 'googleai/gemini-2.0-flash-preview-image-generation',

@@ -171,7 +171,7 @@ export function CharacterPanel() {
         <CardHeader>
           <CardTitle className="font-headline">Train a New Character</CardTitle>
           <CardDescription>
-            Upload 5-10 high-quality photos of a person to create a reusable character.
+            For best results, upload 5-10 high-quality photos of the same person with varied angles (front, side-profile) and lighting. This helps the AI learn the character's identity accurately.
           </CardDescription>
         </CardHeader>
         <Form {...form}>
@@ -204,7 +204,7 @@ export function CharacterPanel() {
                 name="images"
                 render={() => (
                   <FormItem>
-                    <FormLabel>Reference Images</FormLabel>
+                    <FormLabel>Reference Images (5-10 photos)</FormLabel>
                     <FormControl>
                       <Input id="character-image-upload" type="file" accept="image/*" onChange={handleFileChange} multiple disabled={isLoading || storageLimitReached} />
                     </FormControl>
