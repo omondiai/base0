@@ -50,27 +50,28 @@ const generateImageWithCharacterFlow = ai.defineFlow(
     outputSchema: GenerateImageWithCharacterOutputSchema,
   },
   async input => {
-    const systemPrompt = `You are an expert image generation AI that functions like a fine-tuned model (such as LoRA or Dreambooth). Your primary task is to create a new image featuring a specific character provided through a set of reference images.
+    const systemPrompt = `You are a highly specialized image generation AI. Your purpose is to function as a photorealistic, fine-tuned character model (like a LoRA or Dreambooth). Your single most important task is to preserve the identity of a character provided via reference images with 100% accuracy.
 
-    **CRITICAL INSTRUCTION: IDENTITY PRESERVATION**
-    You MUST treat the provided reference images as a visual fingerprint or identity vector for a single, unique individual. Your absolute highest priority is to maintain this character's identity with 100% accuracy.
-    - **Facial Features:** Replicate the eyes, nose, mouth, jawline, and all other facial structures EXACTLY as shown.
-    - **Skin Tone:** Match the skin tone precisely across all lighting conditions.
-    - **Body Shape:** Preserve the character's body type and structure.
-    - **Unique Identifiers:** Pay close attention to any unique moles, scars, or tattoos if they are visible.
+    **CRITICAL DIRECTIVE: IDENTITY LOCK**
+    You MUST treat the provided reference images as an 'identity lock'. This is not a suggestion for style, it is a command for photorealistic replication. Your highest priority is to perfectly replicate the person in the reference images. All other aspects of the prompt are secondary to this.
 
-    You will now receive a set of reference images for the character, followed by a user prompt describing the scene. Place the IDENTICAL character from the reference images into the scene described by the user's prompt. Do NOT deviate from the character's learned appearance.`;
+    - **FACE:** Replicate the facial features—eyes, nose, mouth, jawline, and bone structure—with *absolute precision*. The generated face must be indistinguishable from the reference photos.
+    - **SKIN TONE & TEXTURE:** Match the exact skin tone and texture.
+    - **BODY SHAPE:** Preserve the character's height, weight, and body structure.
+    - **DO NOT DEVIATE:** Do not interpret, enhance, or stylize the character. Replicate the person exactly as shown. Any deviation from the reference identity is a failure.
+
+    You will receive the reference images first, which establish the character's identity lock. After the images, you will receive a prompt for the scene. Your task is to place the *identical* person from the reference photos into the scene described.`;
 
     const promptParts: (MediaPart | {text: string})[] = [{text: systemPrompt}];
 
-    // Add all character reference images
+    // Add all character reference images to establish the 'identity lock'
     input.characterImages.forEach(image => {
       promptParts.push({media: {url: image}});
     });
 
-    // Add the user's text prompt
+    // Add the user's text prompt as the final instruction
     promptParts.push({
-      text: `User Scene Prompt: "${input.prompt}". Generate an image placing the character from the reference photos into this scene.`,
+      text: `IDENTITY ESTABLISHED. Now, generate an image based on the following scene description: "${input.prompt}". Remember, the character's appearance is non-negotiable and must be an exact match to the reference images.`,
     });
 
     const {media} = await ai.generate({
