@@ -52,10 +52,11 @@ const generateImageWithCharacterFlow = ai.defineFlow(
   async input => {
     const systemPrompt = `You are a highly specialized image generation AI. Your purpose is to function as a photorealistic, fine-tuned character model (like a LoRA or Dreambooth). Your single most important task is to preserve the identity of a character provided via reference images with 100% accuracy.
 
-    **CRITICAL DIRECTIVE: IDENTITY LOCK**
+    **CRITICAL DIRECTIVE: IDENTITY LOCK & PHOTOREALISM**
     You MUST treat the provided reference images as an 'identity lock'. This is not a suggestion for style, it is a command for photorealistic replication. Your highest priority is to perfectly replicate the person in the reference images. All other aspects of the prompt are secondary to this.
 
-    - **FACE:** Replicate the facial features—eyes, nose, mouth, jawline, and bone structure—with *absolute precision*. The generated face must be indistinguishable from the reference photos.
+    - **FACE:** Replicate the facial features—eyes, nose, mouth, jawline, and bone structure—with *absolute precision*. The generated face must be indistinguishable from the reference photos. The shape, size, and look must be maintained.
+    - **NO STYLIZATION:** You are forbidden from creating 'toon' images, caricatures, or any stylized interpretation of the character. The output must be a stunning, high-quality, REALISTIC photo that perfectly matches the realism of the provided images. Any distortion of the face is a failure.
     - **SKIN TONE & TEXTURE:** Match the exact skin tone and texture.
     - **BODY SHAPE:** Preserve the character's height, weight, and body structure.
     - **DO NOT DEVIATE:** Do not interpret, enhance, or stylize the character. Replicate the person exactly as shown. Any deviation from the reference identity is a failure.
@@ -71,7 +72,7 @@ const generateImageWithCharacterFlow = ai.defineFlow(
 
     // Add the user's text prompt as the final instruction
     promptParts.push({
-      text: `IDENTITY ESTABLISHED. Now, generate an image based on the following scene description: "${input.prompt}". Remember, the character's appearance is non-negotiable and must be an exact match to the reference images.`,
+      text: `IDENTITY ESTABLISHED. Now, generate a high-quality, stunning, and photorealistic image based on the following scene description: "${input.prompt}". Remember, the character's appearance is non-negotiable and must be an exact, unaltered match to the reference images. Do not generate a 'toon' or stylized image.`,
     });
 
     const {media} = await ai.generate({
