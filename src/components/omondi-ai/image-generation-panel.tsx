@@ -27,9 +27,10 @@ import type { Character } from "./character-panel";
 
 const formSchema = z.object({
   description: z.string().optional(),
-  images: z.array(z.any()).optional(),
+  images: z.array(z.any()).optional(), // For multi-image enhancement
+  clothingImage: z.any().optional(), // For single virtual try-on image
   characterId: z.string().optional(),
-}).refine(data => !!data.description || (data.images && data.images.length > 0), {
+}).refine(data => !!data.description, {
   message: "Please provide a description.",
   path: ["description"],
 });
@@ -49,8 +50,21 @@ export function ImageGenerationPanel() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isImproving, setIsImproving] = useState(false);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [enhanceImagePreviews, setEnhanceImagePreviews] = useState<string[]>([]);
+  const [clothingImagePreview, setClothingImagePreview] = useState<string | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
+  
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      description: "",
+      images: [],
+      clothingImage: null,
+      characterId: "none",
+    },
+  });
+  
+  const characterId = form.watch("characterId");
 
   useEffect(() => {
     async function fetchCharacters() {
@@ -67,16 +81,7 @@ export function ImageGenerationPanel() {
     fetchCharacters();
   }, [toast]);
 
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      description: "",
-      images: [],
-      characterId: "none",
-    },
-  });
-
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleEnhanceFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
       const currentFiles = form.getValues('images') || [];
@@ -84,43 +89,44 @@ export function ImageGenerationPanel() {
       const combinedFiles = [...currentFiles, ...newFiles];
       
       form.setValue("images", combinedFiles, { shouldValidate: true });
-      form.setValue("characterId", "none"); // Can't use character and upload enhancement images
 
       const newPreviews: string[] = [];
-      const filePromises = newFiles.map(file => {
-        return new Promise<void>(resolve => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            newPreviews.push(reader.result as string);
-            resolve();
-          };
-          reader.readAsDataURL(file);
-        });
-      });
-
-      Promise.all(filePromises).then(() => {
-        setImagePreviews(prev => [...prev, ...newPreviews]);
+      const filePromises = newFiles.map(file => toBase64(file));
+      Promise.all(filePromises).then(base64Files => {
+        setEnhanceImagePreviews(prev => [...prev, ...base64Files]);
       });
     }
   };
+  
+  const handleClothingFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      form.setValue("clothingImage", file, { shouldValidate: true });
+      toBase64(file).then(setClothingImagePreview);
+    }
+  };
 
-  const clearImage = (indexToRemove: number) => {
+  const clearEnhanceImage = (indexToRemove: number) => {
     const currentFiles = form.getValues('images') || [];
     const updatedFiles = currentFiles.filter((_, index) => index !== indexToRemove);
     form.setValue("images", updatedFiles, { shouldValidate: true });
 
-    const updatedPreviews = imagePreviews.filter((_, index) => index !== indexToRemove);
-    setImagePreviews(updatedPreviews);
-
-    const fileInput = document.getElementById('image-upload') as HTMLInputElement;
-    if(fileInput) fileInput.value = "";
+    const updatedPreviews = enhanceImagePreviews.filter((_, index) => index !== indexToRemove);
+    setEnhanceImagePreviews(updatedPreviews);
   }
+
+  const clearClothingImage = () => {
+    form.setValue("clothingImage", null, { shouldValidate: true });
+    setClothingImagePreview(null);
+  };
   
-  const cleanup = () => {
+  const cleanupAfterGeneration = () => {
+    // Clear multi-image enhancement
     form.setValue("images", [], { shouldValidate: true });
-    setImagePreviews([]);
-    const fileInput = document.getElementById('image-upload') as HTMLInputElement;
-    if(fileInput) fileInput.value = "";
+    setEnhanceImagePreviews([]);
+    
+    // Clear single clothing image
+    clearClothingImage();
   }
 
   const onSubmit: SubmitHandler<FormValues> = async (data) => {
@@ -135,28 +141,34 @@ export function ImageGenerationPanel() {
 
     try {
       let result;
+      // Case 1: Character is selected
       if (data.characterId && data.characterId !== 'none') {
         const selectedCharacter = characters.find(c => c._id === data.characterId);
         if (!selectedCharacter) throw new Error("Selected character not found.");
         
+        const clothingImageBase64 = data.clothingImage ? await toBase64(data.clothingImage) : undefined;
+        
         result = await generateImageWithCharacter({
           prompt: data.description,
           characterImages: selectedCharacter.images.map(img => img.dataUri),
+          clothingImage: clothingImageBase64,
         });
 
+      // Case 2: No character, but enhancement images are uploaded
       } else if (data.images && data.images.length > 0) {
         const imageBase64s = await Promise.all(data.images.map(toBase64));
         result = await enhanceImage({
           images: imageBase64s,
           prompt: data.description,
         });
+      // Case 3: Simple text-to-image
       } else {
         result = await generateImageFromDescription({ description: data.description });
       }
 
       if (result.imageUrl) {
         setImageUrl(result.imageUrl);
-        cleanup();
+        cleanupAfterGeneration();
       } else {
         throw new Error("Image generation failed to produce an image.");
       }
@@ -191,17 +203,12 @@ export function ImageGenerationPanel() {
     }
   }
   
-  const images = form.watch("images");
-  const characterId = form.watch("characterId");
-  const hasImages = images && images.length > 0;
-  const hasMultipleImages = hasImages && images.length > 1;
-  const disableCharacterSelect = hasImages;
-  const disableImageUpload = !!characterId && characterId !== 'none';
+  const hasEnhanceImages = enhanceImagePreviews.length > 0;
+  const isCharacterSelected = characterId && characterId !== 'none';
 
   const getPlaceholder = () => {
-    if (characterId && characterId !== 'none') return "e.g., 'photo of my character reading a book in a cafe'";
-    if (hasMultipleImages) return "e.g., 'Combine these into a photo grid'";
-    if (hasImages) return "e.g., 'Make this photo look more vibrant'";
+    if (isCharacterSelected) return "e.g., 'A professional photo of my character wearing this...'";
+    if (hasEnhanceImages) return "e.g., 'Combine these photos into a single grid'";
     return "A futuristic cityscape at sunset...";
   }
 
@@ -224,10 +231,15 @@ export function ImageGenerationPanel() {
                   <FormLabel>Use Saved Character (Optional)</FormLabel>
                   <Select onValueChange={(value) => {
                       field.onChange(value);
+                      // Clear enhancement images if character is selected
                       if (value !== 'none') {
-                        cleanup(); // Clear uploaded images if a character is selected
+                        form.setValue("images", []);
+                        setEnhanceImagePreviews([]);
+                      } else {
+                      // Clear clothing image if character is deselected
+                        clearClothingImage();
                       }
-                  }} defaultValue={field.value} disabled={disableCharacterSelect}>
+                  }} defaultValue={field.value} >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a character" />
@@ -266,39 +278,63 @@ export function ImageGenerationPanel() {
               )}
             />
             
-            <div className="relative flex items-center">
-                <div className="flex-grow border-t border-muted"></div>
-                <span className="flex-shrink mx-4 text-muted-foreground text-xs">OR UPLOAD (ENHANCE)</span>
-                <div className="flex-grow border-t border-muted"></div>
-            </div>
+            {isCharacterSelected ? (
+              // Virtual Try-on Upload
+              <div>
+                <FormField
+                  control={form.control}
+                  name="clothingImage"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>Upload Clothing Image (Optional)</FormLabel>
+                      <FormControl>
+                        <Input id="clothing-upload" type="file" accept="image/*" onChange={handleClothingFileChange} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {clothingImagePreview && (
+                  <div className="mt-2 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    <div className="w-full aspect-square relative rounded-md overflow-hidden border">
+                      <Image src={clothingImagePreview} alt="Clothing preview" fill style={{objectFit: 'cover'}} data-ai-hint="clothing item" />
+                      <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 z-10 h-6 w-6" onClick={clearClothingImage}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Enhance/Combine Upload
+              <div>
+                 <div className="relative flex items-center">
+                    <div className="flex-grow border-t border-muted"></div>
+                    <span className="flex-shrink mx-4 text-muted-foreground text-xs">OR UPLOAD (ENHANCE)</span>
+                    <div className="flex-grow border-t border-muted"></div>
+                </div>
+                <FormField
+                  control={form.control}
+                  name="images"
+                  render={() => (
+                    <FormItem className="mt-4">
+                      <FormLabel>Upload Images to Enhance/Combine</FormLabel>
+                      <FormControl>
+                        <Input id="image-upload" type="file" accept="image/*" onChange={handleEnhanceFileChange} multiple />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
 
-            <FormField
-              control={form.control}
-              name="images"
-              render={() => (
-                <FormItem>
-                  <FormLabel>Upload Images to Enhance/Combine</FormLabel>
-                  <FormControl>
-                    <Input id="image-upload" type="file" accept="image/*" onChange={handleFileChange} multiple disabled={disableImageUpload} />
-                  </FormControl>
-                  {disableImageUpload && <p className="text-xs text-muted-foreground">Cannot upload images when a character is selected.</p>}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {imagePreviews.length > 0 && (
+            {enhanceImagePreviews.length > 0 && !isCharacterSelected && (
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                {imagePreviews.map((preview, index) => (
+                {enhanceImagePreviews.map((preview, index) => (
                   <div key={index} className="w-full aspect-square relative rounded-md overflow-hidden border">
                     <Image src={preview} alt={`Image preview ${index + 1}`} fill style={{objectFit: 'cover'}} data-ai-hint="uploaded image" />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-1 right-1 z-10 h-6 w-6"
-                      onClick={() => clearImage(index)}
-                    >
+                    <Button type="button" variant="destructive" size="icon" className="absolute top-1 right-1 z-10 h-6 w-6" onClick={() => clearEnhanceImage(index)}>
                       <X className="h-3 w-3" />
                     </Button>
                   </div>
@@ -312,7 +348,7 @@ export function ImageGenerationPanel() {
               <Sparkles className="mr-2 h-4 w-4" />
               {isLoading ? "Generating..." : "Generate"}
             </Button>
-            <Button type="button" variant="outline" onClick={handleImprovePrompt} disabled={isImproving || hasImages} className="w-full sm:w-auto">
+            <Button type="button" variant="outline" onClick={handleImprovePrompt} disabled={isImproving || hasEnhanceImages} className="w-full sm:w-auto">
                 <Wand2 className="mr-2 h-4 w-4" />
                 {isImproving ? "Improving..." : "Improve Prompt"}
             </Button>

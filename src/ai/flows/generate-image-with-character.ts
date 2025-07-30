@@ -23,6 +23,12 @@ const GenerateImageWithCharacterInputSchema = z.object({
     )
     .min(1)
     .describe('An array of reference images for the character.'),
+  clothingImage: z
+    .string()
+    .optional()
+    .describe(
+      "An optional image of clothing to dress the character in, as a data URI. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+    ),
 });
 
 export type GenerateImageWithCharacterInput = z.infer<
@@ -70,10 +76,17 @@ const generateImageWithCharacterFlow = ai.defineFlow(
       promptParts.push({media: {url: image}});
     });
 
-    // Add the user's text prompt as the final instruction
-    promptParts.push({
-      text: `IDENTITY ESTABLISHED. Now, generate a high-quality, stunning, and photorealistic image based on the following scene description: "${input.prompt}". Remember, the character's appearance is non-negotiable and must be an exact, unaltered match to the reference images. Do not generate a 'toon' or stylized image.`,
-    });
+    let finalPrompt;
+
+    if (input.clothingImage) {
+      promptParts.push({media: {url: input.clothingImage}});
+      finalPrompt = `IDENTITY ESTABLISHED. You have also been provided an image of clothing. Now, generate a high-quality, stunning, and photorealistic image of the character wearing the provided clothing. The scene should be: "${input.prompt}". Remember, the character's appearance is non-negotiable and must be an exact, unaltered match to the reference images. Do not generate a 'toon' or stylized image. The clothing should be accurately represented on the character.`;
+    } else {
+      finalPrompt = `IDENTITY ESTABLISHED. Now, generate a high-quality, stunning, and photorealistic image based on the following scene description: "${input.prompt}". Remember, the character's appearance is non-negotiable and must be an exact, unaltered match to the reference images. Do not generate a 'toon' or stylized image.`;
+    }
+
+    // Add the final instruction prompt
+    promptParts.push({text: finalPrompt});
 
     const {media} = await ai.generate({
       model: 'googleai/gemini-2.0-flash-preview-image-generation',
