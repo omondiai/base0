@@ -18,15 +18,16 @@ export default function Icon() {
       <div
         style={{
           fontSize: 24,
-          background: '#0D0D0D',
+          background: 'hsl(180 100% 45%)', // Using the primary theme color
           width: '100%',
           height: '100%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#E5E5E5',
+          color: 'white',
           borderRadius: '50%',
           fontWeight: 'bold',
+          fontFamily: 'Poppins, sans-serif',
         }}
       >
         O
