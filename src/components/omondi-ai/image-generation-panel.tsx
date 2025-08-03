@@ -24,6 +24,7 @@ import { Download, Sparkles, Wand2, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import type { Character } from "./character-panel";
 
+const CHARACTER_SELECTION_KEY = 'omondi_ai_selected_character_v1';
 
 const formSchema = z.object({
   description: z.string().optional(),
@@ -67,19 +68,37 @@ export function ImageGenerationPanel() {
   const characterId = form.watch("characterId");
 
   useEffect(() => {
+    // On mount, load the saved character ID from localStorage
+    const savedCharacterId = localStorage.getItem(CHARACTER_SELECTION_KEY);
+    if (savedCharacterId && savedCharacterId !== 'none') {
+      form.setValue('characterId', savedCharacterId);
+    }
+    
     async function fetchCharacters() {
       try {
         const response = await fetch('/api/characters');
         if (!response.ok) throw new Error("Failed to fetch characters");
         const data = await response.json();
         setCharacters(data.characters);
+        // Ensure the saved character still exists
+        if (savedCharacterId && !data.characters.some((c: Character) => c._id === savedCharacterId)) {
+          localStorage.removeItem(CHARACTER_SELECTION_KEY);
+          form.setValue('characterId', 'none');
+        }
       } catch (error) {
         console.error(error);
         toast({ variant: "destructive", title: "Error", description: "Could not load saved characters."});
       }
     }
     fetchCharacters();
-  }, [toast]);
+  }, [toast, form]);
+
+  // Save characterId to localStorage whenever it changes
+  useEffect(() => {
+    if (characterId) {
+      localStorage.setItem(CHARACTER_SELECTION_KEY, characterId);
+    }
+  }, [characterId]);
 
   const handleEnhanceFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -239,7 +258,7 @@ export function ImageGenerationPanel() {
                       // Clear clothing image if character is deselected
                         clearClothingImage();
                       }
-                  }} defaultValue={field.value} >
+                  }} value={field.value} >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a character" />
